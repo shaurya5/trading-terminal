@@ -51,9 +51,9 @@ function NewsCard({ item, symbol }: { item: NewsItem; symbol: string }) {
                 {symbol}
               </span>
             )}
-            <span className="text-[9px] text-gray-600">{item.source}</span>
-            <span className="text-[9px] text-gray-700">·</span>
-            <span className="text-[9px] text-gray-600">{timeAgo(item.datetime)}</span>
+            <span className="text-[9px] text-gray-500">{item.source}</span>
+            <span className="text-[9px] text-gray-600">·</span>
+            <span className="text-[9px] text-gray-500">{timeAgo(item.datetime)}</span>
           </div>
 
           <h3 className={`text-[12px] font-medium leading-snug line-clamp-2 ${
@@ -65,12 +65,12 @@ function NewsCard({ item, symbol }: { item: NewsItem; symbol: string }) {
           {item.relatedTickers && item.relatedTickers.length > 0 && !isMarket && (
             <div className="flex items-center gap-1 mt-1">
               {item.relatedTickers.slice(0, 4).map(t => (
-                <span key={t} className="text-[8px] text-gray-600 bg-gray-800/80 px-1 py-px rounded font-mono">
+                <span key={t} className="text-[8px] text-gray-500 bg-gray-800/80 px-1 py-px rounded font-mono">
                   {displaySymbol(t)}
                 </span>
               ))}
               {item.relatedTickers.length > 4 && (
-                <span className="text-[8px] text-gray-700">+{item.relatedTickers.length - 4}</span>
+                <span className="text-[8px] text-gray-500">+{item.relatedTickers.length - 4}</span>
               )}
             </div>
           )}
@@ -118,7 +118,7 @@ export default function NewsFeed({ news, symbol, loading }: NewsFeedProps) {
         {marketNews.length > 0 && (
           <>
             <div className="px-3 py-1.5 bg-[#070a10] border-y border-gray-800">
-              <span className="text-[9px] text-gray-600 uppercase tracking-wider">General Market</span>
+              <span className="text-[9px] text-gray-500 uppercase tracking-wider">General Market</span>
             </div>
             {marketNews.map(item => (
               <NewsCard key={item.id} item={item} symbol={symbol} />

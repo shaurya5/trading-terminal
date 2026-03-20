@@ -64,7 +64,7 @@ export default function Watchlist({ stocks, selectedSymbol, onSelect, onAddToWat
       <div className="px-3 py-2 border-b border-gray-800">
         <h2 className="text-[11px] text-gray-400 uppercase tracking-wider font-semibold">Watchlist</h2>
       </div>
-      <div className="flex items-center px-3 py-1 border-b border-gray-800 text-[9px] text-gray-600 uppercase tracking-wider">
+      <div className="flex items-center px-3 py-1 border-b border-gray-800 text-[9px] text-gray-500 uppercase tracking-wider">
         <span className="w-20">Symbol</span>
         <span className="flex-1 text-right">Last</span>
         <span className="w-16 text-right">Chg%</span>
@@ -121,7 +121,7 @@ export default function Watchlist({ stocks, selectedSymbol, onSelect, onAddToWat
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
                   <span className="truncate">{w.name}</span>
-                  <span className="text-[9px] text-gray-600 ml-auto shrink-0">{w.symbols.length}</span>
+                  <span className="text-[9px] text-gray-500 ml-auto shrink-0">{w.symbols.length}</span>
                 </button>
               ))}
             </>

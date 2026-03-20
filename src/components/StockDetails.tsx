@@ -52,19 +52,19 @@ export default function StockDetails({ stock }: StockDetailsProps) {
           </span>
         </div>
         {stock.sector && (
-          <div className="text-[9px] text-gray-600 mt-0.5 uppercase tracking-wider">{stock.sector}</div>
+          <div className="text-[9px] text-gray-500 mt-0.5 uppercase tracking-wider">{stock.sector}</div>
         )}
       </div>
 
       <div className="px-3 py-2 space-y-0.5 flex-1 overflow-y-auto">
-        <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Trading</div>
+        <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Trading</div>
         <Stat label="Open" value={`\u20B9${stock.open.toFixed(2)}`} />
         <Stat label="High" value={`\u20B9${stock.high.toFixed(2)}`} />
         <Stat label="Low" value={`\u20B9${stock.low.toFixed(2)}`} />
         <Stat label="Prev Close" value={`\u20B9${stock.prevClose.toFixed(2)}`} />
         <Stat label="Volume" value={formatVol(stock.volume)} />
 
-        <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-3 mb-1">Fundamentals</div>
+        <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-3 mb-1">Fundamentals</div>
         <Stat label="Market Cap" value={formatINR(stock.marketCap)} />
         <Stat label="P/E Ratio" value={stock.pe > 0 ? stock.pe.toFixed(1) : 'N/A'} />
         <Stat label="52W High" value={`\u20B9${stock.week52High.toFixed(2)}`} />
@@ -72,7 +72,7 @@ export default function StockDetails({ stock }: StockDetailsProps) {
 
         {stock.week52High > 0 && stock.week52Low > 0 && (
           <div className="mt-3">
-            <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">52 Week Range</div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1.5">52 Week Range</div>
             <div className="relative h-1.5 bg-gray-800 rounded-full">
               <div
                 className="absolute h-full bg-blue-500 rounded-full"
@@ -84,8 +84,8 @@ export default function StockDetails({ stock }: StockDetailsProps) {
               />
             </div>
             <div className="flex justify-between mt-1">
-              <span className="text-[9px] text-gray-600 font-mono">{'\u20B9'}{stock.week52Low.toFixed(2)}</span>
-              <span className="text-[9px] text-gray-600 font-mono">{'\u20B9'}{stock.week52High.toFixed(2)}</span>
+              <span className="text-[9px] text-gray-500 font-mono">{'\u20B9'}{stock.week52Low.toFixed(2)}</span>
+              <span className="text-[9px] text-gray-500 font-mono">{'\u20B9'}{stock.week52High.toFixed(2)}</span>
             </div>
           </div>
         )}

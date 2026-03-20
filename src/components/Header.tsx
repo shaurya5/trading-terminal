@@ -28,7 +28,7 @@ function Clock() {
     return () => clearInterval(id);
   }, []);
 
-  return <div className="text-[10px] text-gray-600 font-mono hidden md:block">{time}</div>;
+  return <div className="text-[10px] text-gray-500 font-mono hidden md:block">{time}</div>;
 }
 
 export default function Header({ onSearchOpen, activeView, onViewChange, onToggleSidebar, sidebarCollapsed }: HeaderProps) {
@@ -65,7 +65,7 @@ export default function Header({ onSearchOpen, activeView, onViewChange, onToggl
                   : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/50'
               }`}
             >
-              <kbd className="text-[9px] text-gray-600 mr-1">{v.shortcut}</kbd>
+              <kbd className="text-[9px] text-gray-500 mr-1">{v.shortcut}</kbd>
               <span className="hidden sm:inline">{v.label}</span>
             </button>
           ))}
@@ -82,13 +82,13 @@ export default function Header({ onSearchOpen, activeView, onViewChange, onToggl
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <span className="hidden sm:inline">Search</span>
-          <kbd className="text-[9px] text-gray-600 bg-gray-800 px-1 rounded">/</kbd>
+          <kbd className="text-[9px] text-gray-500 bg-gray-800 px-1 rounded">/</kbd>
         </button>
         <div className="flex items-center gap-1.5">
           <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
           <span className="text-[10px] text-gray-500">NSE · LIVE</span>
         </div>
-        <Link href="/disclaimer" className="text-[9px] text-gray-600 hover:text-gray-400 transition-colors">
+        <Link href="/disclaimer" className="text-[9px] text-gray-500 hover:text-gray-400 transition-colors">
           Disclaimer
         </Link>
         <Clock />

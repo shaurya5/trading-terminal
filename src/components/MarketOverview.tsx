@@ -19,7 +19,7 @@ export default function MarketOverview({ indices, sectors }: MarketOverviewProps
           <div key={idx.symbol} className="flex items-center justify-between">
             <div>
               <span className="text-[10px] text-gray-400 font-mono">{idx.symbol}</span>
-              <span className="ml-1.5 text-[9px] text-gray-600">{idx.name}</span>
+              <span className="ml-1.5 text-[9px] text-gray-500">{idx.name}</span>
             </div>
             <div className="text-right">
               <span className="text-[11px] text-white font-mono">{idx.value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
@@ -33,7 +33,7 @@ export default function MarketOverview({ indices, sectors }: MarketOverviewProps
 
       {sectors.length > 0 && (
         <div className="px-3 py-2">
-          <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Sector Heatmap</div>
+          <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-2">Sector Heatmap</div>
           <div className="grid grid-cols-2 gap-1">
             {sectors.map(sector => {
               const intensity = Math.min(Math.abs(sector.performance) * 40, 100);
@@ -59,7 +59,7 @@ export default function MarketOverview({ indices, sectors }: MarketOverviewProps
       {indices.length === 0 && (
         <div className="px-3 py-8 text-center">
           <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-          <div className="text-[11px] text-gray-600">Loading indices...</div>
+          <div className="text-[11px] text-gray-500">Loading indices...</div>
         </div>
       )}
     </div>

@@ -82,7 +82,7 @@ export default function UserWatchlist({
               }`}
             >
               {w.name}
-              <span className="ml-1 text-[9px] text-gray-600">{w.symbols.length}</span>
+              <span className="ml-1 text-[9px] text-gray-500">{w.symbols.length}</span>
             </button>
           ))}
         </div>
@@ -199,7 +199,7 @@ export default function UserWatchlist({
         </div>
       )}
 
-      <div className="flex items-center px-3 py-1 border-b border-gray-800 text-[9px] text-gray-600 uppercase tracking-wider">
+      <div className="flex items-center px-3 py-1 border-b border-gray-800 text-[9px] text-gray-500 uppercase tracking-wider">
         <span className="flex-1">Symbol</span>
         <span className="w-16 text-right">Last</span>
         <span className="w-14 text-right">Chg%</span>

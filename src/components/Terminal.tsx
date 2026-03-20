@@ -502,7 +502,7 @@ export default function Terminal() {
             key={p}
             onClick={() => setRightPanel(p)}
             className={`flex-1 py-1.5 text-[10px] uppercase tracking-wider transition-colors ${
-              rightPanel === p ? 'text-white bg-gray-800/50' : 'text-gray-600 hover:text-gray-400'
+              rightPanel === p ? 'text-white bg-gray-800/50' : 'text-gray-500 hover:text-gray-400'
             }`}
           >
             {p === 'watchlist' ? `W/List${watchlists.reduce((n, w) => n + w.symbols.length, 0) > 0 ? ` (${watchlists.reduce((n, w) => n + w.symbols.length, 0)})` : ''}` : p}
@@ -578,12 +578,12 @@ export default function Terminal() {
       )}
       {!disclaimerDismissed && (
         <div className="h-5 bg-[#0a0e17] border-b border-gray-800/50 flex items-center justify-center relative flex-shrink-0">
-          <span className="text-[8px] text-gray-600 text-center">
+          <span className="text-[8px] text-gray-500 text-center">
             Data provided by Yahoo Finance. Prices may be delayed. For informational purposes only — not financial advice.
           </span>
           <button
             onClick={dismissDisclaimer}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 hover:text-gray-400 text-[10px] leading-none"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-400 text-[10px] leading-none"
             aria-label="Dismiss disclaimer"
           >
             ×
@@ -728,11 +728,11 @@ export default function Terminal() {
         </div>
       )}
 
-      <div className="flex items-center justify-between h-6 px-4 bg-[#070a10] border-t border-gray-800 text-[9px] text-gray-600">
+      <div className="flex items-center justify-between h-6 px-4 bg-[#070a10] border-t border-gray-800 text-[9px] text-gray-500">
         <div className="flex items-center gap-4">
-          <span><kbd className="text-gray-700 bg-gray-800 px-1 rounded mr-1">/</kbd>Search</span>
-          <span><kbd className="text-gray-700 bg-gray-800 px-1 rounded mr-1">1-4</kbd>Switch View</span>
-          <span><kbd className="text-gray-700 bg-gray-800 px-1 rounded mr-1">ESC</kbd>Close</span>
+          <span><kbd className="text-gray-500 bg-gray-800 px-1 rounded mr-1">/</kbd>Search</span>
+          <span><kbd className="text-gray-500 bg-gray-800 px-1 rounded mr-1">1-4</kbd>Switch View</span>
+          <span><kbd className="text-gray-500 bg-gray-800 px-1 rounded mr-1">ESC</kbd>Close</span>
         </div>
         <div className="flex items-center gap-3">
           <span>{stocks.length} stocks · NSE</span>

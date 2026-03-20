@@ -269,7 +269,7 @@ export default function ChartControls({
                   style={{ backgroundColor: ind.enabled ? ind.color : '#333' }}
                 />
                 {label}
-                {ind.period > 0 && <span className={ind.enabled ? 'text-gray-400' : 'text-gray-700'}>{ind.period}</span>}
+                {ind.period > 0 && <span className={ind.enabled ? 'text-gray-400' : 'text-gray-600'}>{ind.period}</span>}
               </button>
             );
           })}
@@ -278,7 +278,7 @@ export default function ChartControls({
         {/* Tools */}
         {onToggleMeasure && (
           <>
-            <span className="text-gray-700 mx-0.5 shrink-0">|</span>
+            <span className="text-gray-600 mx-0.5 shrink-0">|</span>
             <button
               onClick={onToggleMeasure}
               aria-pressed={measureMode}
