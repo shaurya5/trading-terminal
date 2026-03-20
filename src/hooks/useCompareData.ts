@@ -28,7 +28,8 @@ export function useCompareData(symbols: string[], range: string) {
     }).catch(() => {});
 
     return () => { cancelled = true; };
-  }, [key, range, isEmpty, symbols]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, range, isEmpty]);
 
   return data;
 }

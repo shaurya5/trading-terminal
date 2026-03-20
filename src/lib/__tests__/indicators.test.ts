@@ -82,8 +82,8 @@ describe('calculateEMA', () => {
     expect(result[2].value).toBe(40);
   });
 
-  it('throws when given empty data (no guard in source)', () => {
-    expect(() => calculateEMA([], 3)).toThrow();
+  it('returns empty array for empty data', () => {
+    expect(calculateEMA([], 3)).toEqual([]);
   });
 });
 
@@ -120,13 +120,13 @@ describe('calculateRSI', () => {
     }
   });
 
-  it('throws when given empty data (no guard in source)', () => {
-    expect(() => calculateRSI([], 14)).toThrow();
+  it('returns empty array for empty data', () => {
+    expect(calculateRSI([], 14)).toEqual([]);
   });
 
-  it('throws when data is shorter than period + 1 (no guard in source)', () => {
+  it('returns empty array when data is shorter than period + 1', () => {
     const candles = makeCandles([10, 20, 30]);
-    expect(() => calculateRSI(candles, 14)).toThrow();
+    expect(calculateRSI(candles, 14)).toEqual([]);
   });
 });
 
@@ -165,9 +165,12 @@ describe('calculateMACD', () => {
     }
   });
 
-  it('throws for insufficient data (no guard in source)', () => {
+  it('returns empty arrays for insufficient data', () => {
     const candles = makeCandles([10, 20, 30]);
-    expect(() => calculateMACD(candles)).toThrow();
+    const result = calculateMACD(candles);
+    expect(result.macd).toEqual([]);
+    expect(result.signal).toEqual([]);
+    expect(result.histogram).toEqual([]);
   });
 });
 

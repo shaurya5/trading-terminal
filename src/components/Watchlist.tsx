@@ -103,7 +103,10 @@ export default function Watchlist({ stocks, selectedSymbol, onSelect, onAddToWat
         <div
           ref={menuRef}
           className="fixed z-50 py-1 min-w-[180px] bg-[#1a1f2e] border border-gray-700 rounded shadow-lg shadow-black/50"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
+          style={{
+            top: Math.min(contextMenu.y, window.innerHeight - 200),
+            left: Math.min(contextMenu.x, window.innerWidth - 200),
+          }}
         >
           {watchlists && watchlists.length > 1 ? (
             <>

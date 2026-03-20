@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { IndicatorConfig, IndicatorType } from '@/types';
 import { INDICATOR_CATALOG, INDICATOR_PALETTE } from '@/lib/indicatorCatalog';
 
@@ -27,6 +27,14 @@ function IndicatorModal({
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<'active' | 'add'>('active');
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
 
   const overlays = INDICATOR_CATALOG.filter(c => c.panel === 'overlay');
   const subcharts = INDICATOR_CATALOG.filter(c => c.panel === 'subchart');

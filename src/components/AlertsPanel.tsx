@@ -20,10 +20,12 @@ export default function AlertsPanel({ alerts, stocks, onAdd, onRemove, onToggle 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!symbol || !price) return;
+    const targetPrice = parseFloat(price);
+    if (isNaN(targetPrice) || targetPrice <= 0) return;
     let sym = symbol.toUpperCase().trim();
     // Auto-append .NS if missing exchange suffix
     if (!sym.endsWith('.NS') && !sym.endsWith('.BO')) sym += '.NS';
-    onAdd({ symbol: sym, targetPrice: parseFloat(price), condition, active: true });
+    onAdd({ symbol: sym, targetPrice, condition, active: true });
     setSymbol('');
     setPrice('');
     setShowForm(false);

@@ -39,6 +39,7 @@ export default function ComparePanel({ compareSymbols, onAdd, onRemove }: Compar
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
+            onBlur={() => setTimeout(() => setQuery(''), 150)}
             placeholder="+ Add stock"
             className="w-24 px-1.5 py-0.5 text-[10px] bg-transparent border border-gray-800 rounded text-white placeholder-gray-600 outline-none focus:border-blue-500"
           />
@@ -49,6 +50,7 @@ export default function ComparePanel({ compareSymbols, onAdd, onRemove }: Compar
                 .map(r => (
                   <button
                     key={r.symbol}
+                    onMouseDown={e => e.preventDefault()}
                     onClick={() => { onAdd(r.symbol); setQuery(''); }}
                     className="w-full px-2 py-1 text-left text-[10px] hover:bg-gray-800/50"
                   >

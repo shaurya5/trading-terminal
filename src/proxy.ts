@@ -21,6 +21,14 @@ function getRateLimitInfo(ip: string): { count: number; resetTime: number } {
 }
 
 export function proxy(request: NextRequest) {
+  // Clean up stale rate limit entries older than 60 seconds
+  const now = Date.now();
+  for (const [key, entry] of rateLimitMap) {
+    if (now > entry.resetTime) {
+      rateLimitMap.delete(key);
+    }
+  }
+
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     ?? request.headers.get('x-real-ip')
     ?? '127.0.0.1';

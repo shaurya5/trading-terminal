@@ -3,6 +3,7 @@ import { CandleData } from '@/types';
 export type TimeValue = { time: string | number; value: number };
 
 export function calculateSMA(data: CandleData[], period: number): TimeValue[] {
+  if (data.length < period || period <= 0) return [];
   const result: TimeValue[] = [];
   for (let i = period - 1; i < data.length; i++) {
     let sum = 0;
@@ -15,6 +16,7 @@ export function calculateSMA(data: CandleData[], period: number): TimeValue[] {
 }
 
 export function calculateEMA(data: CandleData[], period: number): TimeValue[] {
+  if (data.length < period || period <= 0) return [];
   const result: TimeValue[] = [];
   const multiplier = 2 / (period + 1);
 
@@ -31,6 +33,7 @@ export function calculateEMA(data: CandleData[], period: number): TimeValue[] {
 }
 
 export function calculateRSI(data: CandleData[], period: number = 14): TimeValue[] {
+  if (data.length <= period || period <= 0) return [];
   const result: TimeValue[] = [];
   const changes: number[] = [];
 
@@ -65,6 +68,7 @@ export function calculateMACD(data: CandleData[]): {
   signal: TimeValue[];
   histogram: (TimeValue & { color: string })[];
 } {
+  if (data.length < 26) return { macd: [], signal: [], histogram: [] };
   const ema12 = calculateEMA(data, 12);
   const ema26 = calculateEMA(data, 26);
 
@@ -110,6 +114,7 @@ export function calculateBollingerBands(data: CandleData[], period: number = 20,
   middle: TimeValue[];
   lower: TimeValue[];
 } {
+  if (data.length < period || period <= 0) return { upper: [], middle: [], lower: [] };
   const upper: TimeValue[] = [];
   const middle: TimeValue[] = [];
   const lower: TimeValue[] = [];
@@ -136,6 +141,7 @@ export function calculateStochastic(
   kPeriod: number = 14,
   dPeriod: number = 3
 ): { k: TimeValue[]; d: TimeValue[] } {
+  if (data.length < kPeriod || kPeriod <= 0) return { k: [], d: [] };
   const kValues: TimeValue[] = [];
 
   for (let i = kPeriod - 1; i < data.length; i++) {
@@ -164,7 +170,7 @@ export function calculateStochastic(
 }
 
 export function calculateATR(data: CandleData[], period: number = 14): TimeValue[] {
-  if (data.length < 2) return [];
+  if (data.length < 2 || period <= 0) return [];
 
   const trValues: number[] = [];
 
@@ -197,6 +203,7 @@ export function calculateATR(data: CandleData[], period: number = 14): TimeValue
 }
 
 export function calculateVWAP(data: CandleData[]): TimeValue[] {
+  if (data.length === 0) return [];
   const result: TimeValue[] = [];
   let cumulativeTPV = 0;
   let cumulativeVolume = 0;
@@ -213,6 +220,7 @@ export function calculateVWAP(data: CandleData[]): TimeValue[] {
 }
 
 export function calculateWilliamsR(data: CandleData[], period: number = 14): TimeValue[] {
+  if (data.length < period || period <= 0) return [];
   const result: TimeValue[] = [];
 
   for (let i = period - 1; i < data.length; i++) {
@@ -231,8 +239,8 @@ export function calculateWilliamsR(data: CandleData[], period: number = 14): Tim
 }
 
 export function calculateOBV(data: CandleData[]): TimeValue[] {
+  if (data.length < 2) return [];
   const result: TimeValue[] = [];
-  if (data.length === 0) return result;
 
   let obv = data[0].volume;
   result.push({ time: data[0].time, value: obv });

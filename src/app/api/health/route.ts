@@ -10,12 +10,11 @@ export async function GET() {
   let yahooStatus: 'ok' | 'down' = 'ok';
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-    await yahooFinance.quoteSummary('RELIANCE.NS', {
-      modules: ['price'],
-    });
-    clearTimeout(timeout);
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+    await Promise.race([
+      yahooFinance.quoteSummary('RELIANCE.NS', { modules: ['price'] }),
+      timeoutPromise,
+    ]);
   } catch {
     yahooStatus = 'down';
   }

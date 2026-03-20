@@ -30,8 +30,9 @@ function isRelevant(
   // Check headline contains company name or symbol
   const title = (item.title ?? '').toLowerCase();
   if (title.includes(baseSymbol.toLowerCase())) return true;
-  // Check for company name words (at least 2 chars, skip common words)
-  const nameWords = companyName.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  // Check for company name words (at least 2 chars, skip common/stop words)
+  const STOP_WORDS = new Set(['inc', 'ltd', 'the', 'and', 'for', 'corp', 'company', 'limited', 'group', 'industries']);
+  const nameWords = companyName.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !STOP_WORDS.has(w));
   if (nameWords.length > 0 && nameWords.some(w => title.includes(w))) return true;
   return false;
 }

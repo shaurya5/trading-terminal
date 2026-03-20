@@ -59,6 +59,7 @@ const COMPARE_COLORS = ['#FF9800', '#E91E63', '#00BCD4', '#8BC34A'];
 
 export default function Chart({ data, symbol, indicators, compareData, measureMode }: ChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const isSyncingRef = useRef(false);
 
   // Chart instance refs
   const chartRef = useRef<IChartApi | null>(null);
@@ -622,15 +623,19 @@ export default function Chart({ data, symbol, indicators, compareData, measureMo
 
       subChartsRef.current.set(panelType, subEntry);
 
-      // Sync time scales bidirectionally with main chart
+      // Sync time scales bidirectionally with main chart (guarded to prevent infinite loop)
       chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
-        if (range) {
+        if (range && !isSyncingRef.current) {
+          isSyncingRef.current = true;
           try { subChart.timeScale().setVisibleLogicalRange(range); } catch { /* */ }
+          isSyncingRef.current = false;
         }
       });
       subChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
-        if (range) {
+        if (range && !isSyncingRef.current) {
+          isSyncingRef.current = true;
           try { chart.timeScale().setVisibleLogicalRange(range); } catch { /* */ }
+          isSyncingRef.current = false;
         }
       });
     });

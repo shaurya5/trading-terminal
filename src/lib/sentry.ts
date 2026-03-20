@@ -1,29 +1,31 @@
 // Lightweight Sentry integration — reports errors when NEXT_PUBLIC_SENTRY_DSN is set.
 // Falls back to console.error when not configured.
 
-const DSN = typeof window !== 'undefined'
-  ? (process.env.NEXT_PUBLIC_SENTRY_DSN ?? '')
-  : (process.env.NEXT_PUBLIC_SENTRY_DSN ?? '');
+const DSN = process.env.NEXT_PUBLIC_SENTRY_DSN ?? '';
 
 const ENABLED = DSN.length > 0;
 
-let initialized = false;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let SentryModule: any = null;
+let initPromise: Promise<void> | null = null;
 
 async function ensureInit() {
-  if (!ENABLED || initialized) return;
-  initialized = true;
-  try {
-    SentryModule = await import('@sentry/nextjs');
-    SentryModule.init({
-      dsn: DSN,
-      tracesSampleRate: 0.1,
-      environment: process.env.NODE_ENV,
-    });
-  } catch {
-    // @sentry/nextjs not installed — that's fine, errors go to console
+  if (!ENABLED) return;
+  if (!initPromise) {
+    initPromise = (async () => {
+      try {
+        SentryModule = await import('@sentry/nextjs');
+        SentryModule.init({
+          dsn: DSN,
+          tracesSampleRate: 0.1,
+          environment: process.env.NODE_ENV,
+        });
+      } catch {
+        // @sentry/nextjs not installed — that's fine, errors go to console
+      }
+    })();
   }
+  await initPromise;
 }
 
 export async function captureException(error: unknown, context?: Record<string, unknown>) {

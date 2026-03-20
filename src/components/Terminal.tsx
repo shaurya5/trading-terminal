@@ -114,9 +114,12 @@ export default function Terminal() {
   }, []);
 
   // Multi-window
-  const [chartWindows, setChartWindows] = useState<ChartWindow[]>([
-    { id: 'main', symbol: 'RELIANCE.NS', compareSymbols: [] },
-  ]);
+  const [chartWindows, setChartWindows] = useState<ChartWindow[]>(() => {
+    const sym = typeof window !== 'undefined'
+      ? (localStorage.getItem('trading-selected-symbol') ?? 'RELIANCE.NS')
+      : 'RELIANCE.NS';
+    return [{ id: 'main', symbol: sym, compareSymbols: [] }];
+  });
 
   // Comparison
   const [compareSymbols, setCompareSymbols] = useState<string[]>([]);
@@ -153,16 +156,26 @@ export default function Terminal() {
   }, []);
 
   // Auto-dismiss toasts after 10 seconds
+  const toastTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
   useEffect(() => {
-    if (toasts.length === 0) return;
-    const timers = toasts.map(toast => {
-      const age = Date.now() - toast.timestamp;
-      const remaining = Math.max(10000 - age, 0);
-      return setTimeout(() => {
-        setToasts(prev => prev.filter(t => t.id !== toast.id));
-      }, remaining);
-    });
-    return () => timers.forEach(clearTimeout);
+    // Set timers for new toasts
+    for (const toast of toasts) {
+      if (!toastTimersRef.current.has(toast.id)) {
+        const timer = setTimeout(() => {
+          setToasts(prev => prev.filter(t => t.id !== toast.id));
+          toastTimersRef.current.delete(toast.id);
+        }, 10000);
+        toastTimersRef.current.set(toast.id, timer);
+      }
+    }
+    // Clean up timers for removed toasts
+    for (const [id, timer] of toastTimersRef.current) {
+      if (!toasts.find(t => t.id === id)) {
+        clearTimeout(timer);
+        toastTimersRef.current.delete(id);
+      }
+    }
   }, [toasts]);
 
   // Check alerts against current stock prices

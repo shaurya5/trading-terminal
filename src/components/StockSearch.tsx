@@ -8,13 +8,14 @@ interface StockSearchProps {
   stocks: StockQuote[];
   onSelect: (symbol: string) => void;
   onClose: () => void;
+  isOpen: boolean;
 }
 
 function displaySymbol(s: string) {
   return s.replace('.NS', '').replace('.BO', '');
 }
 
-function StockSearchDialog({ stocks, onSelect, onClose }: StockSearchProps) {
+function StockSearchDialog({ stocks, onSelect, onClose }: Omit<StockSearchProps, 'isOpen'>) {
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -115,7 +116,7 @@ function StockSearchDialog({ stocks, onSelect, onClose }: StockSearchProps) {
   );
 }
 
-export default function StockSearch({ stocks, onSelect, onClose, isOpen }: StockSearchProps & { isOpen: boolean }) {
+export default function StockSearch({ stocks, onSelect, onClose, isOpen }: StockSearchProps) {
   if (!isOpen) return null;
   return <StockSearchDialog stocks={stocks} onSelect={onSelect} onClose={onClose} />;
 }
