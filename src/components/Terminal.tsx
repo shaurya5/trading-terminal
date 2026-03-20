@@ -343,6 +343,19 @@ export default function Terminal() {
     });
   }, []);
 
+  const addCustomIndicator = useCallback((name: string, formula: string, color: string) => {
+    setIndicators(prev => [...prev, {
+      id: crypto.randomUUID(),
+      type: 'CUSTOM' as IndicatorType,
+      period: 0,
+      enabled: true,
+      color,
+      isCustom: true,
+      formula,
+      customName: name,
+    }]);
+  }, []);
+
   const removeIndicator = useCallback((id: string) => {
     setIndicators(prev => prev.filter(i => i.id !== id));
   }, []);
@@ -467,7 +480,7 @@ export default function Terminal() {
 
   const chartSection = (
     <div className="flex-1 flex flex-col min-w-0">
-      <ChartControls indicators={indicators} onAddIndicator={addIndicator} onRemoveIndicator={removeIndicator} onUpdateIndicator={updateIndicator} measureMode={measureMode} onToggleMeasure={toggleMeasure} />
+      <ChartControls indicators={indicators} onAddIndicator={addIndicator} onRemoveIndicator={removeIndicator} onUpdateIndicator={updateIndicator} onAddCustomIndicator={addCustomIndicator} measureMode={measureMode} onToggleMeasure={toggleMeasure} />
       <ComparePanel compareSymbols={compareSymbols} onAdd={addCompare} onRemove={removeCompare} />
       <div className="flex items-center gap-0.5 px-3 py-1 border-b border-gray-800 bg-[#0d1117]">
         <span className="text-[10px] text-gray-500 uppercase tracking-wider mr-2">Range</span>
@@ -719,6 +732,7 @@ export default function Terminal() {
             onAddIndicator={addIndicator}
             onRemoveIndicator={removeIndicator}
             onUpdateIndicator={updateIndicator}
+            onAddCustomIndicator={addCustomIndicator}
             chartRange={chartRange}
             onChangeRange={setChartRange}
             onAddWindowCompare={addWindowCompare}

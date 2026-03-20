@@ -28,6 +28,7 @@ import {
   TimeValue,
 } from '@/lib/indicators';
 import { getIndicatorPanel } from '@/lib/indicatorCatalog';
+import { evaluateFormula } from '@/lib/formulaParser';
 
 interface MeasurePoint {
   price: number;
@@ -398,6 +399,21 @@ export default function Chart({ data, symbol, indicators, compareData, measureMo
     indicators.forEach(ind => {
       if (!ind.enabled) return;
 
+      // Handle custom formula indicators
+      if (ind.isCustom && ind.formula) {
+        const series = overlaySeriesRef.current.get(ind.id);
+        if (series) {
+          const result = evaluateFormula(ind.formula, data);
+          if (result.values.length > 0) {
+            series.setData(toLineData(result.values));
+          }
+          if (result.error) {
+            console.warn(`Custom indicator "${ind.customName}" error:`, result.error);
+          }
+        }
+        return;
+      }
+
       const panel = getIndicatorPanel(ind.type);
 
       if (panel === 'overlay') {
@@ -527,6 +543,18 @@ export default function Chart({ data, symbol, indicators, compareData, measureMo
     const newOverlayMap = new Map<string, ISeriesApi<any>>();
     indicators.forEach(ind => {
       if (!ind.enabled) return;
+
+      // Custom formula indicators are always overlay
+      if (ind.isCustom && ind.formula) {
+        const s = chart.addSeries(LineSeries, {
+          color: ind.color,
+          lineWidth: 1,
+          priceLineVisible: false,
+        });
+        newOverlayMap.set(ind.id, s);
+        return;
+      }
+
       const panel = getIndicatorPanel(ind.type);
       if (panel !== 'overlay') return;
 
