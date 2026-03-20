@@ -5,6 +5,11 @@ import {
   calculateRSI,
   calculateMACD,
   calculateBollingerBands,
+  calculateStochastic,
+  calculateATR,
+  calculateVWAP,
+  calculateWilliamsR,
+  calculateOBV,
 } from '@/lib/indicators';
 import { CandleData } from '@/types';
 
@@ -209,5 +214,199 @@ describe('calculateBollingerBands', () => {
     expect(result.upper).toEqual([]);
     expect(result.middle).toEqual([]);
     expect(result.lower).toEqual([]);
+  });
+});
+
+// Helper that allows custom high, low, and volume per bar
+function makeCandleData(
+  bars: { close: number; high?: number; low?: number; volume?: number }[]
+): CandleData[] {
+  return bars.map((b, i) => ({
+    time: `2024-01-${String(i + 1).padStart(2, '0')}`,
+    open: b.close,
+    high: b.high ?? b.close + 1,
+    low: b.low ?? b.close - 1,
+    close: b.close,
+    volume: b.volume ?? 1000,
+  }));
+}
+
+describe('calculateStochastic', () => {
+  it('returns k and d arrays', () => {
+    const prices = Array.from({ length: 30 }, (_, i) => 100 + Math.sin(i) * 10);
+    const candles = makeCandles(prices);
+    const result = calculateStochastic(candles, 14, 3);
+    expect(Array.isArray(result.k)).toBe(true);
+    expect(Array.isArray(result.d)).toBe(true);
+    expect(result.k.length).toBeGreaterThan(0);
+    expect(result.d.length).toBeGreaterThan(0);
+  });
+
+  it('k values are between 0 and 100', () => {
+    const prices = Array.from({ length: 30 }, (_, i) => 100 + Math.sin(i) * 10);
+    const candles = makeCandles(prices);
+    const result = calculateStochastic(candles, 14, 3);
+    for (const point of result.k) {
+      expect(point.value).toBeGreaterThanOrEqual(0);
+      expect(point.value).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it('d array is shorter than k by dPeriod - 1', () => {
+    const prices = Array.from({ length: 30 }, (_, i) => 100 + i);
+    const candles = makeCandles(prices);
+    const result = calculateStochastic(candles, 14, 3);
+    expect(result.d.length).toBe(result.k.length - 2); // dPeriod - 1 = 2
+  });
+
+  it('returns empty arrays for insufficient data', () => {
+    const candles = makeCandles([10, 20, 30]);
+    const result = calculateStochastic(candles, 14, 3);
+    expect(result.k).toEqual([]);
+    expect(result.d).toEqual([]);
+  });
+});
+
+describe('calculateATR', () => {
+  it('returns positive values', () => {
+    const candles = makeCandleData(
+      Array.from({ length: 30 }, (_, i) => ({
+        close: 100 + Math.sin(i) * 10,
+        high: 100 + Math.sin(i) * 10 + 3,
+        low: 100 + Math.sin(i) * 10 - 3,
+      }))
+    );
+    const result = calculateATR(candles, 14);
+    expect(result.length).toBeGreaterThan(0);
+    for (const point of result) {
+      expect(point.value).toBeGreaterThan(0);
+    }
+  });
+
+  it('returns correct length', () => {
+    const candles = makeCandleData(
+      Array.from({ length: 30 }, (_, i) => ({
+        close: 100 + i,
+        high: 100 + i + 2,
+        low: 100 + i - 2,
+      }))
+    );
+    const result = calculateATR(candles, 14);
+    // Should have data.length - period + 1 values
+    expect(result.length).toBe(30 - 14 + 1);
+  });
+
+  it('returns empty array for insufficient data', () => {
+    const candles = makeCandles([10, 20, 30]);
+    const result = calculateATR(candles, 14);
+    expect(result).toEqual([]);
+  });
+
+  it('returns empty array for less than 2 data points', () => {
+    const candles = makeCandles([10]);
+    const result = calculateATR(candles, 1);
+    // Only 1 data point, ATR needs at least 2 bars for TR calculation
+    expect(result).toEqual([]);
+  });
+});
+
+describe('calculateVWAP', () => {
+  it('returns values between low and high price range', () => {
+    const candles = makeCandleData(
+      Array.from({ length: 20 }, (_, i) => ({
+        close: 100 + i,
+        high: 105 + i,
+        low: 95 + i,
+        volume: 1000 + i * 100,
+      }))
+    );
+    const result = calculateVWAP(candles);
+    expect(result.length).toBe(candles.length);
+
+    // VWAP should be within the overall price range
+    const allLows = candles.map(c => c.low);
+    const allHighs = candles.map(c => c.high);
+    const minLow = Math.min(...allLows);
+    const maxHigh = Math.max(...allHighs);
+    for (const point of result) {
+      expect(point.value).toBeGreaterThanOrEqual(minLow);
+      expect(point.value).toBeLessThanOrEqual(maxHigh);
+    }
+  });
+
+  it('returns same length as input', () => {
+    const candles = makeCandles([100, 101, 102, 103, 104]);
+    const result = calculateVWAP(candles);
+    expect(result.length).toBe(candles.length);
+  });
+
+  it('returns empty array for empty data', () => {
+    const result = calculateVWAP([]);
+    expect(result).toEqual([]);
+  });
+});
+
+describe('calculateWilliamsR', () => {
+  it('returns values between -100 and 0', () => {
+    const prices = Array.from({ length: 30 }, (_, i) => 100 + Math.sin(i) * 10);
+    const candles = makeCandles(prices);
+    const result = calculateWilliamsR(candles, 14);
+    expect(result.length).toBeGreaterThan(0);
+    for (const point of result) {
+      expect(point.value).toBeGreaterThanOrEqual(-100);
+      expect(point.value).toBeLessThanOrEqual(0);
+    }
+  });
+
+  it('returns correct length', () => {
+    const prices = Array.from({ length: 30 }, (_, i) => 100 + i);
+    const candles = makeCandles(prices);
+    const result = calculateWilliamsR(candles, 14);
+    expect(result.length).toBe(30 - 14 + 1);
+  });
+
+  it('returns empty for insufficient data', () => {
+    const candles = makeCandles([10, 20, 30]);
+    const result = calculateWilliamsR(candles, 14);
+    expect(result).toEqual([]);
+  });
+});
+
+describe('calculateOBV', () => {
+  it('returns correct length', () => {
+    const candles = makeCandles([100, 101, 102, 103, 104]);
+    const result = calculateOBV(candles);
+    expect(result.length).toBe(candles.length);
+  });
+
+  it('first value equals first volume', () => {
+    const candles = makeCandleData([
+      { close: 100, volume: 5000 },
+      { close: 102, volume: 3000 },
+      { close: 101, volume: 2000 },
+    ]);
+    const result = calculateOBV(candles);
+    expect(result[0].value).toBe(5000);
+  });
+
+  it('increases on up moves and decreases on down moves', () => {
+    const candles = makeCandleData([
+      { close: 100, volume: 1000 },
+      { close: 105, volume: 2000 }, // up => OBV = 1000 + 2000 = 3000
+      { close: 102, volume: 1500 }, // down => OBV = 3000 - 1500 = 1500
+      { close: 102, volume: 800 },  // equal => OBV = 1500
+      { close: 110, volume: 3000 }, // up => OBV = 1500 + 3000 = 4500
+    ]);
+    const result = calculateOBV(candles);
+    expect(result[0].value).toBe(1000);
+    expect(result[1].value).toBe(3000);
+    expect(result[2].value).toBe(1500);
+    expect(result[3].value).toBe(1500); // unchanged on equal close
+    expect(result[4].value).toBe(4500);
+  });
+
+  it('returns empty array for empty data', () => {
+    const result = calculateOBV([]);
+    expect(result).toEqual([]);
   });
 });

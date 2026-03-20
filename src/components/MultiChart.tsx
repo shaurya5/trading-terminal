@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { IndicatorConfig, ChartWindow } from '@/types';
+import { IndicatorConfig, IndicatorType, ChartWindow } from '@/types';
 import { useCandles, useSearch } from '@/hooks/useStockData';
 import { useCompareData } from '@/hooks/useCompareData';
 import Chart from './Chart';
@@ -14,7 +14,9 @@ interface MultiChartProps {
   onRemoveWindow: (id: string) => void;
   onChangeSymbol: (id: string, symbol: string) => void;
   indicators: IndicatorConfig[];
-  onToggleIndicator: (type: IndicatorConfig['type']) => void;
+  onAddIndicator: (type: IndicatorType) => void;
+  onRemoveIndicator: (id: string) => void;
+  onUpdateIndicator: (id: string, updates: Partial<Pick<IndicatorConfig, 'period' | 'color' | 'enabled'>>) => void;
   chartRange: string;
   onChangeRange: (range: string) => void;
   onAddWindowCompare: (windowId: string, symbol: string) => void;
@@ -195,7 +197,9 @@ export default function MultiChart({
   onRemoveWindow,
   onChangeSymbol,
   indicators,
-  onToggleIndicator,
+  onAddIndicator,
+  onRemoveIndicator,
+  onUpdateIndicator,
   chartRange,
   onChangeRange,
   onAddWindowCompare,
@@ -207,7 +211,7 @@ export default function MultiChart({
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
-      <ChartControls indicators={indicators} onToggle={onToggleIndicator} measureMode={measureMode} onToggleMeasure={onToggleMeasure} />
+      <ChartControls indicators={indicators} onAddIndicator={onAddIndicator} onRemoveIndicator={onRemoveIndicator} onUpdateIndicator={onUpdateIndicator} measureMode={measureMode} onToggleMeasure={onToggleMeasure} />
       <div className="flex items-center gap-0.5 px-3 py-1 border-b border-gray-800 bg-[#0d1117]">
         <span className="text-[10px] text-gray-500 uppercase tracking-wider mr-2">Range</span>
         {['1d', '5d', '1mo', '6mo', '1y', '5y'].map(r => (

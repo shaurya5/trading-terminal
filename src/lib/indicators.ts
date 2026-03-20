@@ -1,6 +1,6 @@
 import { CandleData } from '@/types';
 
-type TimeValue = { time: string | number; value: number };
+export type TimeValue = { time: string | number; value: number };
 
 export function calculateSMA(data: CandleData[], period: number): TimeValue[] {
   const result: TimeValue[] = [];
@@ -129,4 +129,123 @@ export function calculateBollingerBands(data: CandleData[], period: number = 20,
   }
 
   return { upper, middle, lower };
+}
+
+export function calculateStochastic(
+  data: CandleData[],
+  kPeriod: number = 14,
+  dPeriod: number = 3
+): { k: TimeValue[]; d: TimeValue[] } {
+  const kValues: TimeValue[] = [];
+
+  for (let i = kPeriod - 1; i < data.length; i++) {
+    let lowestLow = Infinity;
+    let highestHigh = -Infinity;
+    for (let j = 0; j < kPeriod; j++) {
+      if (data[i - j].low < lowestLow) lowestLow = data[i - j].low;
+      if (data[i - j].high > highestHigh) highestHigh = data[i - j].high;
+    }
+    const range = highestHigh - lowestLow;
+    const k = range === 0 ? 50 : 100 * (data[i].close - lowestLow) / range;
+    kValues.push({ time: data[i].time, value: +k.toFixed(2) });
+  }
+
+  // %D = SMA of %K over dPeriod
+  const dValues: TimeValue[] = [];
+  for (let i = dPeriod - 1; i < kValues.length; i++) {
+    let sum = 0;
+    for (let j = 0; j < dPeriod; j++) {
+      sum += kValues[i - j].value;
+    }
+    dValues.push({ time: kValues[i].time, value: +(sum / dPeriod).toFixed(2) });
+  }
+
+  return { k: kValues, d: dValues };
+}
+
+export function calculateATR(data: CandleData[], period: number = 14): TimeValue[] {
+  if (data.length < 2) return [];
+
+  const trValues: number[] = [];
+
+  // First TR uses high - low only (no previous close)
+  trValues.push(data[0].high - data[0].low);
+
+  for (let i = 1; i < data.length; i++) {
+    const highLow = data[i].high - data[i].low;
+    const highPrevClose = Math.abs(data[i].high - data[i - 1].close);
+    const lowPrevClose = Math.abs(data[i].low - data[i - 1].close);
+    trValues.push(Math.max(highLow, highPrevClose, lowPrevClose));
+  }
+
+  const result: TimeValue[] = [];
+
+  // First ATR = simple average of first `period` TR values
+  if (trValues.length < period) return [];
+  let atr = 0;
+  for (let i = 0; i < period; i++) atr += trValues[i];
+  atr /= period;
+  result.push({ time: data[period - 1].time, value: +atr.toFixed(2) });
+
+  // Wilder's smoothing: ATR = ((prevATR * (period - 1)) + currentTR) / period
+  for (let i = period; i < trValues.length; i++) {
+    atr = (atr * (period - 1) + trValues[i]) / period;
+    result.push({ time: data[i].time, value: +atr.toFixed(2) });
+  }
+
+  return result;
+}
+
+export function calculateVWAP(data: CandleData[]): TimeValue[] {
+  const result: TimeValue[] = [];
+  let cumulativeTPV = 0;
+  let cumulativeVolume = 0;
+
+  for (let i = 0; i < data.length; i++) {
+    const tp = (data[i].high + data[i].low + data[i].close) / 3;
+    cumulativeTPV += tp * data[i].volume;
+    cumulativeVolume += data[i].volume;
+    const vwap = cumulativeVolume === 0 ? tp : cumulativeTPV / cumulativeVolume;
+    result.push({ time: data[i].time, value: +vwap.toFixed(2) });
+  }
+
+  return result;
+}
+
+export function calculateWilliamsR(data: CandleData[], period: number = 14): TimeValue[] {
+  const result: TimeValue[] = [];
+
+  for (let i = period - 1; i < data.length; i++) {
+    let highestHigh = -Infinity;
+    let lowestLow = Infinity;
+    for (let j = 0; j < period; j++) {
+      if (data[i - j].high > highestHigh) highestHigh = data[i - j].high;
+      if (data[i - j].low < lowestLow) lowestLow = data[i - j].low;
+    }
+    const range = highestHigh - lowestLow;
+    const wr = range === 0 ? -50 : -100 * (highestHigh - data[i].close) / range;
+    result.push({ time: data[i].time, value: +wr.toFixed(2) });
+  }
+
+  return result;
+}
+
+export function calculateOBV(data: CandleData[]): TimeValue[] {
+  const result: TimeValue[] = [];
+  if (data.length === 0) return result;
+
+  let obv = data[0].volume;
+  result.push({ time: data[0].time, value: obv });
+
+  for (let i = 1; i < data.length; i++) {
+    if (data[i].close > data[i - 1].close) {
+      obv += data[i].volume;
+    } else if (data[i].close < data[i - 1].close) {
+      obv -= data[i].volume;
+    }
+    // If equal, OBV unchanged
+    result.push({ time: data[i].time, value: obv });
+  }
+
+  return result;
 }

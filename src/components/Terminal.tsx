@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { IndicatorConfig, PriceAlert, ChartWindow, NamedWatchlist, ToastItem, SectorPerformance } from '@/types';
+import { IndicatorConfig, IndicatorType, PriceAlert, ChartWindow, NamedWatchlist, ToastItem, SectorPerformance } from '@/types';
 import { useQuotes, useIndices, useCandles, useNews } from '@/hooks/useStockData';
 import { useCompareData } from '@/hooks/useCompareData';
 import { safeParseJSON, safeGetString } from '@/lib/storage';
+import { INDICATOR_CATALOG, nextColor } from '@/lib/indicatorCatalog';
 import Header from './Header';
 import Watchlist from './Watchlist';
 import Chart from './Chart';
@@ -30,13 +31,19 @@ const SECTOR_MAP: Record<string, string[]> = {
   'Infrastructure': ['LT.NS'],
 };
 
-const DEFAULT_INDICATORS: IndicatorConfig[] = [
-  { type: 'SMA', period: 20, enabled: false, color: '#FFD700' },
-  { type: 'EMA', period: 12, enabled: false, color: '#00BFFF' },
-  { type: 'RSI', period: 14, enabled: false, color: '#AB47BC' },
-  { type: 'MACD', period: 12, enabled: false, color: '#2196F3' },
-  { type: 'BOLLINGER', period: 20, enabled: false, color: '#2196F3' },
-];
+/** Migrate old indicator format (no `id` field) to new format with UUIDs. */
+function migrateIndicators(raw: unknown[]): IndicatorConfig[] {
+  return (raw as Record<string, unknown>[])
+    .filter(item => item && typeof item === 'object' && 'type' in item)
+    .map(item => ({
+      id: (item.id as string) || crypto.randomUUID(),
+      type: item.type as IndicatorType,
+      period: typeof item.period === 'number' ? item.period : 14,
+      enabled: typeof item.enabled === 'boolean' ? item.enabled : true,
+      color: typeof item.color === 'string' ? item.color : '#FFD700',
+      ...(item.params && typeof item.params === 'object' ? { params: item.params as Record<string, number> } : {}),
+    }));
+}
 
 function displaySymbol(s: string) {
   return s.replace('.NS', '').replace('.BO', '');
@@ -64,14 +71,11 @@ export default function Terminal() {
   });
   const [searchOpen, setSearchOpen] = useState(false);
   const [indicators, setIndicators] = useState<IndicatorConfig[]>(() => {
-    const parsed = safeParseJSON<IndicatorConfig[] | null>('trading-indicators', null);
-    if (parsed) {
-      return DEFAULT_INDICATORS.map(d => {
-        const match = parsed.find(p => p.type === d.type);
-        return match ? { ...d, enabled: match.enabled } : d;
-      });
+    const parsed = safeParseJSON<unknown[] | null>('trading-indicators', null);
+    if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+      return migrateIndicators(parsed);
     }
-    return DEFAULT_INDICATORS;
+    return [];
   });
   const [alerts, setAlerts] = useState<PriceAlert[]>(() => {
     return safeParseJSON<PriceAlert[]>('trading-alerts', []);
@@ -310,8 +314,28 @@ export default function Terminal() {
     return () => window.removeEventListener('keydown', handler);
   }, [searchOpen]);
 
-  const toggleIndicator = useCallback((type: IndicatorConfig['type']) => {
-    setIndicators(prev => prev.map(i => (i.type === type ? { ...i, enabled: !i.enabled } : i)));
+  const addIndicator = useCallback((type: IndicatorType) => {
+    const entry = INDICATOR_CATALOG.find(c => c.type === type);
+    if (!entry) return;
+    setIndicators(prev => {
+      const config: IndicatorConfig = {
+        id: crypto.randomUUID(),
+        type,
+        period: entry.defaultPeriod,
+        enabled: true,
+        color: nextColor(prev),
+        ...(entry.defaultParams ? { params: { ...entry.defaultParams } } : {}),
+      };
+      return [...prev, config];
+    });
+  }, []);
+
+  const removeIndicator = useCallback((id: string) => {
+    setIndicators(prev => prev.filter(i => i.id !== id));
+  }, []);
+
+  const updateIndicator = useCallback((id: string, updates: Partial<Pick<IndicatorConfig, 'period' | 'color' | 'enabled'>>) => {
+    setIndicators(prev => prev.map(i => (i.id === id ? { ...i, ...updates } : i)));
   }, []);
 
   const toggleMeasure = useCallback(() => {
@@ -430,7 +454,7 @@ export default function Terminal() {
 
   const chartSection = (
     <div className="flex-1 flex flex-col min-w-0">
-      <ChartControls indicators={indicators} onToggle={toggleIndicator} measureMode={measureMode} onToggleMeasure={toggleMeasure} />
+      <ChartControls indicators={indicators} onAddIndicator={addIndicator} onRemoveIndicator={removeIndicator} onUpdateIndicator={updateIndicator} measureMode={measureMode} onToggleMeasure={toggleMeasure} />
       <ComparePanel compareSymbols={compareSymbols} onAdd={addCompare} onRemove={removeCompare} />
       <div className="flex items-center gap-0.5 px-3 py-1 border-b border-gray-800 bg-[#0d1117]">
         <span className="text-[10px] text-gray-500 uppercase tracking-wider mr-2">Range</span>
@@ -679,7 +703,9 @@ export default function Terminal() {
             onRemoveWindow={removeChartWindow}
             onChangeSymbol={(id, sym) => setChartWindows(prev => prev.map(w => w.id === id ? { ...w, symbol: sym } : w))}
             indicators={indicators}
-            onToggleIndicator={toggleIndicator}
+            onAddIndicator={addIndicator}
+            onRemoveIndicator={removeIndicator}
+            onUpdateIndicator={updateIndicator}
             chartRange={chartRange}
             onChangeRange={setChartRange}
             onAddWindowCompare={addWindowCompare}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import {
   createChart,
   CandlestickSeries,
@@ -13,8 +13,21 @@ import {
   HistogramData,
   Time,
 } from 'lightweight-charts';
-import { CandleData, IndicatorConfig } from '@/types';
-import { calculateSMA, calculateEMA, calculateRSI, calculateMACD, calculateBollingerBands } from '@/lib/indicators';
+import { CandleData, IndicatorConfig, IndicatorType } from '@/types';
+import {
+  calculateSMA,
+  calculateEMA,
+  calculateRSI,
+  calculateMACD,
+  calculateBollingerBands,
+  calculateStochastic,
+  calculateATR,
+  calculateVWAP,
+  calculateWilliamsR,
+  calculateOBV,
+  TimeValue,
+} from '@/lib/indicators';
+import { getIndicatorPanel } from '@/lib/indicatorCatalog';
 
 interface MeasurePoint {
   price: number;
@@ -31,6 +44,12 @@ interface ChartProps {
   measureMode?: boolean;
 }
 
+type SubChartEntry = {
+  chart: IChartApi;
+  div: HTMLDivElement;
+  series: Map<string, ISeriesApi<any>>;
+};
+
 function safeRemoveChart(chart: IChartApi | null) {
   if (!chart) return;
   try { chart.remove(); } catch { /* already disposed */ }
@@ -43,34 +62,19 @@ export default function Chart({ data, symbol, indicators, compareData, measureMo
 
   // Chart instance refs
   const chartRef = useRef<IChartApi | null>(null);
-  const rsiChartRef = useRef<IChartApi | null>(null);
-  const macdChartRef = useRef<IChartApi | null>(null);
-
-  // DOM element refs for sub-chart containers
   const mainDivRef = useRef<HTMLDivElement | null>(null);
-  const rsiDivRef = useRef<HTMLDivElement | null>(null);
-  const macdDivRef = useRef<HTMLDivElement | null>(null);
 
-  // Series refs for in-place data updates
+  // Series refs for main chart
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const compareSeriesRef = useRef<ISeriesApi<'Line'>[]>([]);
-  const indicatorSeriesRef = useRef<ISeriesApi<'Line'>[]>([]);
-  // Bollinger bands are groups of 3 series (upper, middle, lower)
-  const bollingerSeriesRef = useRef<[ISeriesApi<'Line'>, ISeriesApi<'Line'>, ISeriesApi<'Line'>][]>([]);
 
-  // RSI sub-chart series
-  const rsiLineSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const rsiOverboughtSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const rsiOversoldSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  // Dynamic overlay series map: keyed by indicator id (Bollinger uses ${id}-upper, ${id}-middle, ${id}-lower)
+  const overlaySeriesRef = useRef<Map<string, ISeriesApi<any>>>(new Map());
 
-  // MACD sub-chart series
-  const macdLineSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const macdSignalSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const macdHistogramSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
-
-  // Track the structural state that was used for the last build
-  const prevStructureRef = useRef<{ hasRSI: boolean; hasMACD: boolean; indicatorKeys: string; compareCount: number } | null>(null);
+  // Dynamic sub-chart map: keyed by panel type (e.g., 'RSI', 'MACD', 'STOCHASTIC', etc.)
+  // Indicators of the same type share one sub-chart panel.
+  const subChartsRef = useRef<Map<string, SubChartEntry>>(new Map());
 
   // Measure tool state
   const [measurePoint1, setMeasurePoint1] = useState<MeasurePoint | null>(null);
@@ -89,43 +93,358 @@ export default function Chart({ data, symbol, indicators, compareData, measureMo
     }
   }, [measurePoint1, measurePoint2]);
 
-  const hasRSI = indicators.some(i => i.type === 'RSI' && i.enabled);
-  const hasMACD = indicators.some(i => i.type === 'MACD' && i.enabled);
+  // Compute which sub-chart panel types are active
+  const activeSubPanelTypes = useMemo(() => {
+    const types = new Set<string>();
+    indicators.filter(i => i.enabled).forEach(i => {
+      const panel = getIndicatorPanel(i.type);
+      if (panel === 'subchart') types.add(i.type);
+    });
+    return types;
+  }, [indicators]);
 
-  // Build a structural key for overlay indicators (SMA/EMA/BOLLINGER configs that affect which series exist on the main chart)
-  // We need to rebuild when the set of enabled indicators or their types change, but NOT when only data changes.
-  const indicatorStructureKey = indicators
-    .filter(i => i.enabled && i.type !== 'RSI' && i.type !== 'MACD')
-    .map(i => `${i.type}-${i.period}-${i.color}`)
-    .join(',');
-  const compareCount = compareData?.length ?? 0;
+  // Structural key for rebuild detection
+  const structureKey = useMemo(() => {
+    const enabledIds = indicators
+      .filter(i => i.enabled)
+      .map(i => `${i.id}:${i.type}`)
+      .sort()
+      .join(',');
+    const subPanels = [...activeSubPanelTypes].sort().join(',');
+    const cmpCount = compareData?.length ?? 0;
+    return `${enabledIds}|${subPanels}|${cmpCount}`;
+  }, [indicators, activeSubPanelTypes, compareData]);
+
+  // Track the structural state used for the last build
+  const prevStructureKeyRef = useRef<string | null>(null);
 
   const destroyCharts = useCallback(() => {
+    // Destroy all sub-charts
+    subChartsRef.current.forEach(entry => {
+      safeRemoveChart(entry.chart);
+    });
+    subChartsRef.current.clear();
+
+    // Destroy main chart
     safeRemoveChart(chartRef.current);
-    safeRemoveChart(rsiChartRef.current);
-    safeRemoveChart(macdChartRef.current);
     chartRef.current = null;
-    rsiChartRef.current = null;
-    macdChartRef.current = null;
+
+    // Clear all series refs
     candleSeriesRef.current = null;
     volumeSeriesRef.current = null;
     compareSeriesRef.current = [];
-    indicatorSeriesRef.current = [];
-    bollingerSeriesRef.current = [];
-    rsiLineSeriesRef.current = null;
-    rsiOverboughtSeriesRef.current = null;
-    rsiOversoldSeriesRef.current = null;
-    macdLineSeriesRef.current = null;
-    macdSignalSeriesRef.current = null;
-    macdHistogramSeriesRef.current = null;
+    overlaySeriesRef.current.clear();
+
     mainDivRef.current = null;
-    rsiDivRef.current = null;
-    macdDivRef.current = null;
   }, []);
 
   /**
+   * Create the series for a specific sub-chart indicator type.
+   * Returns the series keyed by indicator id for storage in the SubChartEntry's series map.
+   */
+  const createSubChartSeries = useCallback((
+    subChart: IChartApi,
+    ind: IndicatorConfig,
+  ): Map<string, ISeriesApi<any>> => {
+    const result = new Map<string, ISeriesApi<any>>();
+
+    switch (ind.type) {
+      case 'RSI': {
+        const rsiSeries = subChart.addSeries(LineSeries, {
+          color: ind.color || '#AB47BC',
+          lineWidth: 1,
+          priceLineVisible: false,
+        });
+        result.set(ind.id, rsiSeries);
+
+        // Reference lines at 70/30
+        const ob = subChart.addSeries(LineSeries, {
+          color: 'rgba(239,83,80,0.4)',
+          lineWidth: 1,
+          lineStyle: 2,
+          priceLineVisible: false,
+        });
+        const os = subChart.addSeries(LineSeries, {
+          color: 'rgba(38,166,154,0.4)',
+          lineWidth: 1,
+          lineStyle: 2,
+          priceLineVisible: false,
+        });
+        result.set(`${ind.id}-overbought`, ob);
+        result.set(`${ind.id}-oversold`, os);
+        break;
+      }
+      case 'MACD': {
+        const ml = subChart.addSeries(LineSeries, {
+          color: '#2196F3',
+          lineWidth: 1,
+          priceLineVisible: false,
+        });
+        const sl = subChart.addSeries(LineSeries, {
+          color: '#FF9800',
+          lineWidth: 1,
+          priceLineVisible: false,
+        });
+        const hs = subChart.addSeries(HistogramSeries, {
+          priceLineVisible: false,
+        });
+        result.set(`${ind.id}-macd`, ml);
+        result.set(`${ind.id}-signal`, sl);
+        result.set(`${ind.id}-histogram`, hs);
+        break;
+      }
+      case 'STOCHASTIC': {
+        const kSeries = subChart.addSeries(LineSeries, {
+          color: ind.color || '#E91E63',
+          lineWidth: 1,
+          priceLineVisible: false,
+        });
+        const dSeries = subChart.addSeries(LineSeries, {
+          color: '#FF9800',
+          lineWidth: 1,
+          priceLineVisible: false,
+        });
+        result.set(`${ind.id}-k`, kSeries);
+        result.set(`${ind.id}-d`, dSeries);
+
+        // Reference lines at 80/20
+        const ob = subChart.addSeries(LineSeries, {
+          color: 'rgba(239,83,80,0.4)',
+          lineWidth: 1,
+          lineStyle: 2,
+          priceLineVisible: false,
+        });
+        const os = subChart.addSeries(LineSeries, {
+          color: 'rgba(38,166,154,0.4)',
+          lineWidth: 1,
+          lineStyle: 2,
+          priceLineVisible: false,
+        });
+        result.set(`${ind.id}-overbought`, ob);
+        result.set(`${ind.id}-oversold`, os);
+        break;
+      }
+      case 'ATR': {
+        const atrSeries = subChart.addSeries(LineSeries, {
+          color: ind.color || '#FF9800',
+          lineWidth: 1,
+          priceLineVisible: false,
+        });
+        result.set(ind.id, atrSeries);
+        break;
+      }
+      case 'WILLIAMS_R': {
+        const wrSeries = subChart.addSeries(LineSeries, {
+          color: ind.color || '#8BC34A',
+          lineWidth: 1,
+          priceLineVisible: false,
+        });
+        result.set(ind.id, wrSeries);
+
+        // Reference lines at -20/-80
+        const ob = subChart.addSeries(LineSeries, {
+          color: 'rgba(239,83,80,0.4)',
+          lineWidth: 1,
+          lineStyle: 2,
+          priceLineVisible: false,
+        });
+        const os = subChart.addSeries(LineSeries, {
+          color: 'rgba(38,166,154,0.4)',
+          lineWidth: 1,
+          lineStyle: 2,
+          priceLineVisible: false,
+        });
+        result.set(`${ind.id}-overbought`, ob);
+        result.set(`${ind.id}-oversold`, os);
+        break;
+      }
+      case 'OBV': {
+        const obvSeries = subChart.addSeries(LineSeries, {
+          color: ind.color || '#03A9F4',
+          lineWidth: 1,
+          priceLineVisible: false,
+        });
+        result.set(ind.id, obvSeries);
+        break;
+      }
+    }
+    return result;
+  }, []);
+
+  /**
+   * Update series data for a single sub-chart indicator.
+   */
+  const updateSubChartIndicatorData = useCallback((
+    ind: IndicatorConfig,
+    seriesMap: Map<string, ISeriesApi<any>>,
+  ) => {
+    if (data.length === 0) return;
+
+    const toLineData = (values: TimeValue[]): LineData[] =>
+      values.map(d => ({ time: d.time as Time, value: d.value })) as LineData[];
+
+    switch (ind.type) {
+      case 'RSI': {
+        const rsiData = calculateRSI(data, ind.period || 14);
+        const series = seriesMap.get(ind.id);
+        if (series) series.setData(toLineData(rsiData));
+
+        const ob = seriesMap.get(`${ind.id}-overbought`);
+        const os = seriesMap.get(`${ind.id}-oversold`);
+        if (ob) ob.setData(rsiData.map(d => ({ time: d.time as Time, value: 70 })) as LineData[]);
+        if (os) os.setData(rsiData.map(d => ({ time: d.time as Time, value: 30 })) as LineData[]);
+        break;
+      }
+      case 'MACD': {
+        const macdData = calculateMACD(data);
+        const ml = seriesMap.get(`${ind.id}-macd`);
+        const sl = seriesMap.get(`${ind.id}-signal`);
+        const hs = seriesMap.get(`${ind.id}-histogram`);
+        if (ml) ml.setData(toLineData(macdData.macd));
+        if (sl) sl.setData(toLineData(macdData.signal));
+        if (hs) hs.setData(macdData.histogram.map(d => ({
+          time: d.time as Time,
+          value: d.value,
+          color: d.color,
+        })) as HistogramData[]);
+        break;
+      }
+      case 'STOCHASTIC': {
+        const kPeriod = ind.params?.kPeriod ?? ind.period ?? 14;
+        const dPeriod = ind.params?.dPeriod ?? 3;
+        const stochData = calculateStochastic(data, kPeriod, dPeriod);
+        const kSeries = seriesMap.get(`${ind.id}-k`);
+        const dSeries = seriesMap.get(`${ind.id}-d`);
+        if (kSeries) kSeries.setData(toLineData(stochData.k));
+        if (dSeries) dSeries.setData(toLineData(stochData.d));
+
+        const ob = seriesMap.get(`${ind.id}-overbought`);
+        const os = seriesMap.get(`${ind.id}-oversold`);
+        if (ob) ob.setData(stochData.k.map(d => ({ time: d.time as Time, value: 80 })) as LineData[]);
+        if (os) os.setData(stochData.k.map(d => ({ time: d.time as Time, value: 20 })) as LineData[]);
+        break;
+      }
+      case 'ATR': {
+        const atrData = calculateATR(data, ind.period || 14);
+        const series = seriesMap.get(ind.id);
+        if (series) series.setData(toLineData(atrData));
+        break;
+      }
+      case 'WILLIAMS_R': {
+        const wrData = calculateWilliamsR(data, ind.period || 14);
+        const series = seriesMap.get(ind.id);
+        if (series) series.setData(toLineData(wrData));
+
+        const ob = seriesMap.get(`${ind.id}-overbought`);
+        const os = seriesMap.get(`${ind.id}-oversold`);
+        if (ob) ob.setData(wrData.map(d => ({ time: d.time as Time, value: -20 })) as LineData[]);
+        if (os) os.setData(wrData.map(d => ({ time: d.time as Time, value: -80 })) as LineData[]);
+        break;
+      }
+      case 'OBV': {
+        const obvData = calculateOBV(data);
+        const series = seriesMap.get(ind.id);
+        if (series) series.setData(toLineData(obvData));
+        break;
+      }
+    }
+  }, [data]);
+
+  /**
+   * Update data in-place on all existing series without destroying/recreating charts.
+   */
+  const updateSeriesData = useCallback(() => {
+    if (data.length === 0) return;
+
+    // Candlestick data
+    if (candleSeriesRef.current) {
+      const candleData: CandlestickData[] = data.map(d => ({
+        time: d.time as Time,
+        open: d.open,
+        high: d.high,
+        low: d.low,
+        close: d.close,
+      }));
+      candleSeriesRef.current.setData(candleData);
+    }
+
+    // Volume data
+    if (volumeSeriesRef.current) {
+      const volumeData: HistogramData[] = data.map(d => ({
+        time: d.time as Time,
+        value: d.volume,
+        color: d.close >= d.open ? 'rgba(38,166,154,0.3)' : 'rgba(239,83,80,0.3)',
+      }));
+      volumeSeriesRef.current.setData(volumeData);
+    }
+
+    // Compare overlays
+    if (compareData && compareSeriesRef.current.length > 0) {
+      compareData.forEach((comp, idx) => {
+        const series = compareSeriesRef.current[idx];
+        if (!series || comp.data.length === 0) return;
+        series.setData(comp.data.map(d => ({
+          time: d.time as Time,
+          value: d.close,
+        })) as LineData[]);
+      });
+    }
+
+    const toLineData = (values: TimeValue[]): LineData[] =>
+      values.map(d => ({ time: d.time as Time, value: d.value })) as LineData[];
+
+    // Update overlay and sub-chart indicators
+    indicators.forEach(ind => {
+      if (!ind.enabled) return;
+
+      const panel = getIndicatorPanel(ind.type);
+
+      if (panel === 'overlay') {
+        // Overlay indicators
+        switch (ind.type) {
+          case 'SMA': {
+            const smaData = calculateSMA(data, ind.period);
+            const series = overlaySeriesRef.current.get(ind.id);
+            if (series) series.setData(toLineData(smaData));
+            break;
+          }
+          case 'EMA': {
+            const emaData = calculateEMA(data, ind.period);
+            const series = overlaySeriesRef.current.get(ind.id);
+            if (series) series.setData(toLineData(emaData));
+            break;
+          }
+          case 'BOLLINGER': {
+            const stdDev = ind.params?.stdDev ?? 2;
+            const bb = calculateBollingerBands(data, ind.period || 20, stdDev);
+            const upper = overlaySeriesRef.current.get(`${ind.id}-upper`);
+            const middle = overlaySeriesRef.current.get(`${ind.id}-middle`);
+            const lower = overlaySeriesRef.current.get(`${ind.id}-lower`);
+            if (upper) upper.setData(toLineData(bb.upper));
+            if (middle) middle.setData(toLineData(bb.middle));
+            if (lower) lower.setData(toLineData(bb.lower));
+            break;
+          }
+          case 'VWAP': {
+            const vwapData = calculateVWAP(data);
+            const series = overlaySeriesRef.current.get(ind.id);
+            if (series) series.setData(toLineData(vwapData));
+            break;
+          }
+        }
+      } else {
+        // Sub-chart indicators
+        const subEntry = subChartsRef.current.get(ind.type);
+        if (subEntry) {
+          updateSubChartIndicatorData(ind, subEntry.series);
+        }
+      }
+    });
+  }, [data, indicators, compareData, updateSubChartIndicatorData]);
+
+  /**
    * Full chart rebuild: destroys everything and creates new chart instances + series.
-   * Only called when sub-chart structure changes (RSI/MACD toggle, indicator config change, compare symbol count change).
+   * Only called when structural key changes.
    */
   const buildChart = useCallback(() => {
     if (!chartContainerRef.current || data.length === 0) return;
@@ -136,7 +455,7 @@ export default function Chart({ data, symbol, indicators, compareData, measureMo
 
     destroyCharts();
 
-    const subChartCount = (hasRSI ? 1 : 0) + (hasMACD ? 1 : 0);
+    const subChartCount = activeSubPanelTypes.size;
     const mainHeight = subChartCount === 0 ? container.clientHeight : container.clientHeight * 0.6;
     const subHeight = subChartCount > 0 ? (container.clientHeight * 0.4) / subChartCount : 0;
 
@@ -203,199 +522,128 @@ export default function Chart({ data, symbol, indicators, compareData, measureMo
     }
     compareSeriesRef.current = newCompareSeries;
 
-    // Overlay indicators (SMA, EMA, Bollinger)
-    const newIndicatorSeries: ISeriesApi<'Line'>[] = [];
-    const newBollingerSeries: [ISeriesApi<'Line'>, ISeriesApi<'Line'>, ISeriesApi<'Line'>][] = [];
+    // Create overlay indicator series on the main chart
+    const newOverlayMap = new Map<string, ISeriesApi<any>>();
     indicators.forEach(ind => {
       if (!ind.enabled) return;
-      if (ind.type === 'SMA') {
-        const s = chart.addSeries(LineSeries, { color: ind.color, lineWidth: 1, priceLineVisible: false });
-        newIndicatorSeries.push(s);
-      }
-      if (ind.type === 'EMA') {
-        const s = chart.addSeries(LineSeries, { color: ind.color, lineWidth: 1, priceLineVisible: false });
-        newIndicatorSeries.push(s);
-      }
-      if (ind.type === 'BOLLINGER') {
-        const u = chart.addSeries(LineSeries, { color: '#2196F3', lineWidth: 1, priceLineVisible: false });
-        const m = chart.addSeries(LineSeries, { color: '#FF9800', lineWidth: 1, priceLineVisible: false });
-        const l = chart.addSeries(LineSeries, { color: '#2196F3', lineWidth: 1, priceLineVisible: false });
-        newBollingerSeries.push([u, m, l]);
+      const panel = getIndicatorPanel(ind.type);
+      if (panel !== 'overlay') return;
+
+      switch (ind.type) {
+        case 'SMA': {
+          const s = chart.addSeries(LineSeries, {
+            color: ind.color,
+            lineWidth: 1,
+            priceLineVisible: false,
+          });
+          newOverlayMap.set(ind.id, s);
+          break;
+        }
+        case 'EMA': {
+          const s = chart.addSeries(LineSeries, {
+            color: ind.color,
+            lineWidth: 1,
+            priceLineVisible: false,
+          });
+          newOverlayMap.set(ind.id, s);
+          break;
+        }
+        case 'BOLLINGER': {
+          const u = chart.addSeries(LineSeries, {
+            color: '#2196F3',
+            lineWidth: 1,
+            priceLineVisible: false,
+          });
+          const m = chart.addSeries(LineSeries, {
+            color: '#FF9800',
+            lineWidth: 1,
+            priceLineVisible: false,
+          });
+          const l = chart.addSeries(LineSeries, {
+            color: '#2196F3',
+            lineWidth: 1,
+            priceLineVisible: false,
+          });
+          newOverlayMap.set(`${ind.id}-upper`, u);
+          newOverlayMap.set(`${ind.id}-middle`, m);
+          newOverlayMap.set(`${ind.id}-lower`, l);
+          break;
+        }
+        case 'VWAP': {
+          const s = chart.addSeries(LineSeries, {
+            color: ind.color || '#009688',
+            lineWidth: 1,
+            priceLineVisible: false,
+          });
+          newOverlayMap.set(ind.id, s);
+          break;
+        }
       }
     });
-    indicatorSeriesRef.current = newIndicatorSeries;
-    bollingerSeriesRef.current = newBollingerSeries;
+    overlaySeriesRef.current = newOverlayMap;
 
-    // RSI sub-chart
-    if (hasRSI) {
-      const rsiDiv = document.createElement('div');
-      rsiDiv.style.height = `${subHeight}px`;
-      rsiDiv.style.borderTop = '1px solid #1a1e2e';
-      container.appendChild(rsiDiv);
-      rsiDivRef.current = rsiDiv;
+    // Create sub-chart panels for each active panel type
+    const sortedPanelTypes = [...activeSubPanelTypes].sort();
+    sortedPanelTypes.forEach((panelType, panelIdx) => {
+      const isLastPanel = panelIdx === sortedPanelTypes.length - 1;
 
-      const rsiChart = createChart(rsiDiv, {
-        width: container.clientWidth, height: subHeight,
+      const subDiv = document.createElement('div');
+      subDiv.style.height = `${subHeight}px`;
+      subDiv.style.borderTop = '1px solid #1a1e2e';
+      container.appendChild(subDiv);
+
+      const subChart = createChart(subDiv, {
+        width: container.clientWidth,
+        height: subHeight,
         layout: { background: { color: '#0a0e17' }, textColor: '#8a8f98' },
         grid: { vertLines: { color: '#1a1e2e' }, horzLines: { color: '#1a1e2e' } },
         rightPriceScale: { borderColor: '#1a1e2e' },
-        timeScale: { borderColor: '#1a1e2e', visible: !hasMACD, timeVisible: isIntraday },
+        timeScale: {
+          borderColor: '#1a1e2e',
+          visible: isLastPanel,
+          timeVisible: isIntraday,
+        },
       });
-      rsiChartRef.current = rsiChart;
 
-      const rsiSeries = rsiChart.addSeries(LineSeries, { color: '#AB47BC', lineWidth: 1, priceLineVisible: false });
-      rsiLineSeriesRef.current = rsiSeries;
+      const subEntry: SubChartEntry = {
+        chart: subChart,
+        div: subDiv,
+        series: new Map(),
+      };
 
-      const ob = rsiChart.addSeries(LineSeries, { color: 'rgba(239,83,80,0.4)', lineWidth: 1, lineStyle: 2, priceLineVisible: false });
-      const os = rsiChart.addSeries(LineSeries, { color: 'rgba(38,166,154,0.4)', lineWidth: 1, lineStyle: 2, priceLineVisible: false });
-      rsiOverboughtSeriesRef.current = ob;
-      rsiOversoldSeriesRef.current = os;
+      // Create series for each enabled indicator of this panel type
+      indicators.forEach(ind => {
+        if (!ind.enabled || ind.type !== panelType) return;
+        const seriesMap = createSubChartSeries(subChart, ind);
+        seriesMap.forEach((s, key) => {
+          subEntry.series.set(key, s);
+        });
+      });
 
+      subChartsRef.current.set(panelType, subEntry);
+
+      // Sync time scales bidirectionally with main chart
       chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
-        if (range) { try { rsiChart.timeScale().setVisibleLogicalRange(range); } catch { /* */ } }
+        if (range) {
+          try { subChart.timeScale().setVisibleLogicalRange(range); } catch { /* */ }
+        }
       });
-      rsiChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
-        if (range) { try { chart.timeScale().setVisibleLogicalRange(range); } catch { /* */ } }
+      subChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+        if (range) {
+          try { chart.timeScale().setVisibleLogicalRange(range); } catch { /* */ }
+        }
       });
-    }
-
-    // MACD sub-chart
-    if (hasMACD) {
-      const macdDiv = document.createElement('div');
-      macdDiv.style.height = `${subHeight}px`;
-      macdDiv.style.borderTop = '1px solid #1a1e2e';
-      container.appendChild(macdDiv);
-      macdDivRef.current = macdDiv;
-
-      const macdChart = createChart(macdDiv, {
-        width: container.clientWidth, height: subHeight,
-        layout: { background: { color: '#0a0e17' }, textColor: '#8a8f98' },
-        grid: { vertLines: { color: '#1a1e2e' }, horzLines: { color: '#1a1e2e' } },
-        rightPriceScale: { borderColor: '#1a1e2e' },
-        timeScale: { borderColor: '#1a1e2e', timeVisible: isIntraday },
-      });
-      macdChartRef.current = macdChart;
-
-      const ml = macdChart.addSeries(LineSeries, { color: '#2196F3', lineWidth: 1, priceLineVisible: false });
-      const sl = macdChart.addSeries(LineSeries, { color: '#FF9800', lineWidth: 1, priceLineVisible: false });
-      const hs = macdChart.addSeries(HistogramSeries, { priceLineVisible: false });
-      macdLineSeriesRef.current = ml;
-      macdSignalSeriesRef.current = sl;
-      macdHistogramSeriesRef.current = hs;
-
-      chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
-        if (range) { try { macdChart.timeScale().setVisibleLogicalRange(range); } catch { /* */ } }
-      });
-      macdChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
-        if (range) { try { chart.timeScale().setVisibleLogicalRange(range); } catch { /* */ } }
-      });
-    }
+    });
 
     // Record the structural state for this build
-    prevStructureRef.current = {
-      hasRSI,
-      hasMACD,
-      indicatorKeys: indicatorStructureKey,
-      compareCount,
-    };
+    prevStructureKeyRef.current = structureKey;
 
     // Set initial data on all series
     updateSeriesData();
 
     chart.timeScale().fitContent();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasRSI, hasMACD, indicatorStructureKey, compareCount, destroyCharts]);
-
-  /**
-   * Update data in-place on all existing series without destroying/recreating charts.
-   */
-  const updateSeriesData = useCallback(() => {
-    if (data.length === 0) return;
-
-    // Candlestick data
-    if (candleSeriesRef.current) {
-      const candleData: CandlestickData[] = data.map(d => ({
-        time: d.time as Time,
-        open: d.open,
-        high: d.high,
-        low: d.low,
-        close: d.close,
-      }));
-      candleSeriesRef.current.setData(candleData);
-    }
-
-    // Volume data
-    if (volumeSeriesRef.current) {
-      const volumeData: HistogramData[] = data.map(d => ({
-        time: d.time as Time,
-        value: d.volume,
-        color: d.close >= d.open ? 'rgba(38,166,154,0.3)' : 'rgba(239,83,80,0.3)',
-      }));
-      volumeSeriesRef.current.setData(volumeData);
-    }
-
-    // Compare overlays
-    if (compareData && compareSeriesRef.current.length > 0) {
-      compareData.forEach((comp, idx) => {
-        const series = compareSeriesRef.current[idx];
-        if (!series || comp.data.length === 0) return;
-        series.setData(comp.data.map(d => ({
-          time: d.time as Time,
-          value: d.close,
-        })) as LineData[]);
-      });
-    }
-
-    // Overlay indicators (SMA, EMA, Bollinger)
-    let lineIdx = 0;
-    let bbIdx = 0;
-    indicators.forEach(ind => {
-      if (!ind.enabled) return;
-      if (ind.type === 'SMA') {
-        const smaData = calculateSMA(data, ind.period);
-        const series = indicatorSeriesRef.current[lineIdx];
-        if (series) {
-          series.setData(smaData.map(d => ({ time: d.time as Time, value: d.value })) as LineData[]);
-        }
-        lineIdx++;
-      }
-      if (ind.type === 'EMA') {
-        const emaData = calculateEMA(data, ind.period);
-        const series = indicatorSeriesRef.current[lineIdx];
-        if (series) {
-          series.setData(emaData.map(d => ({ time: d.time as Time, value: d.value })) as LineData[]);
-        }
-        lineIdx++;
-      }
-      if (ind.type === 'BOLLINGER') {
-        const bb = calculateBollingerBands(data, ind.period);
-        const bbSeries = bollingerSeriesRef.current[bbIdx];
-        if (bbSeries) {
-          bbSeries[0].setData(bb.upper.map(d => ({ time: d.time as Time, value: d.value })) as LineData[]);
-          bbSeries[1].setData(bb.middle.map(d => ({ time: d.time as Time, value: d.value })) as LineData[]);
-          bbSeries[2].setData(bb.lower.map(d => ({ time: d.time as Time, value: d.value })) as LineData[]);
-        }
-        bbIdx++;
-      }
-    });
-
-    // RSI data
-    if (hasRSI && rsiLineSeriesRef.current && rsiOverboughtSeriesRef.current && rsiOversoldSeriesRef.current) {
-      const rsiInd = indicators.find(i => i.type === 'RSI' && i.enabled);
-      const rsiData = calculateRSI(data, rsiInd?.period ?? 14);
-      rsiLineSeriesRef.current.setData(rsiData.map(d => ({ time: d.time as Time, value: d.value })) as LineData[]);
-      rsiOverboughtSeriesRef.current.setData(rsiData.map(d => ({ time: d.time as Time, value: 70 })) as LineData[]);
-      rsiOversoldSeriesRef.current.setData(rsiData.map(d => ({ time: d.time as Time, value: 30 })) as LineData[]);
-    }
-
-    // MACD data
-    if (hasMACD && macdLineSeriesRef.current && macdSignalSeriesRef.current && macdHistogramSeriesRef.current) {
-      const macdData = calculateMACD(data);
-      macdLineSeriesRef.current.setData(macdData.macd.map(d => ({ time: d.time as Time, value: d.value })) as LineData[]);
-      macdSignalSeriesRef.current.setData(macdData.signal.map(d => ({ time: d.time as Time, value: d.value })) as LineData[]);
-      macdHistogramSeriesRef.current.setData(macdData.histogram.map(d => ({ time: d.time as Time, value: d.value, color: d.color })) as HistogramData[]);
-    }
-  }, [data, indicators, compareData, hasRSI, hasMACD]);
+  }, [structureKey, activeSubPanelTypes, destroyCharts, createSubChartSeries, updateSeriesData]);
 
   /**
    * Resize all chart instances to fit their containers without rebuilding.
@@ -404,7 +652,7 @@ export default function Chart({ data, symbol, indicators, compareData, measureMo
     const container = chartContainerRef.current;
     if (!container) return;
 
-    const subChartCount = (rsiChartRef.current ? 1 : 0) + (macdChartRef.current ? 1 : 0);
+    const subChartCount = subChartsRef.current.size;
     const mainHeight = subChartCount === 0 ? container.clientHeight : container.clientHeight * 0.6;
     const subHeight = subChartCount > 0 ? (container.clientHeight * 0.4) / subChartCount : 0;
     const width = container.clientWidth;
@@ -413,38 +661,30 @@ export default function Chart({ data, symbol, indicators, compareData, measureMo
       mainDivRef.current.style.height = `${mainHeight}px`;
       chartRef.current.resize(width, mainHeight);
     }
-    if (rsiChartRef.current && rsiDivRef.current) {
-      rsiDivRef.current.style.height = `${subHeight}px`;
-      rsiChartRef.current.resize(width, subHeight);
-    }
-    if (macdChartRef.current && macdDivRef.current) {
-      macdDivRef.current.style.height = `${subHeight}px`;
-      macdChartRef.current.resize(width, subHeight);
-    }
+
+    subChartsRef.current.forEach(entry => {
+      entry.div.style.height = `${subHeight}px`;
+      entry.chart.resize(width, subHeight);
+    });
   }, []);
 
-  // Effect: Build chart on mount and when structure changes (RSI/MACD toggle, indicator configs, compare symbol count)
+  // Effect: Build chart on mount and when structure changes
   useEffect(() => {
     if (data.length === 0) return;
 
-    const prev = prevStructureRef.current;
-    const structureChanged = !prev ||
-      prev.hasRSI !== hasRSI ||
-      prev.hasMACD !== hasMACD ||
-      prev.indicatorKeys !== indicatorStructureKey ||
-      prev.compareCount !== compareCount;
+    const structureChanged = prevStructureKeyRef.current !== structureKey;
 
     if (structureChanged) {
       // Full rebuild needed
       buildChart();
     } else {
-      // Structure is the same — just update data in-place
+      // Structure is the same - just update data in-place
       updateSeriesData();
       if (chartRef.current) {
         chartRef.current.timeScale().fitContent();
       }
     }
-  }, [data, indicators, hasRSI, hasMACD, compareData, indicatorStructureKey, compareCount, buildChart, updateSeriesData]);
+  }, [data, indicators, compareData, structureKey, buildChart, updateSeriesData]);
 
   // Effect: Window resize handler + ResizeObserver for initial layout
   useEffect(() => {
@@ -457,7 +697,7 @@ export default function Chart({ data, symbol, indicators, compareData, measureMo
     if (container) {
       observer = new ResizeObserver(() => {
         if (container.clientWidth > 0 && container.clientHeight > 0) {
-          // If chart hasn't been built yet (prevStructureRef is null), build it now
+          // If chart hasn't been built yet (prevStructureKeyRef is null), build it now
           if (!chartRef.current && data.length > 0) {
             buildChart();
           } else {
@@ -516,7 +756,7 @@ export default function Chart({ data, symbol, indicators, compareData, measureMo
     return () => {
       try { chart.unsubscribeCrosshairMove(handler); } catch { /* disposed */ }
     };
-  }, [data, indicators, hasRSI, hasMACD, compareData]);
+  }, [data, indicators, compareData, structureKey]);
 
   // Handle chart clicks for measure tool
   useEffect(() => {
@@ -568,7 +808,7 @@ export default function Chart({ data, symbol, indicators, compareData, measureMo
     return () => {
       mainDiv.removeEventListener('click', handleClick);
     };
-  }, [data, indicators, hasRSI, hasMACD, compareData]);
+  }, [data, indicators, compareData, structureKey]);
 
   // Compute updated pixel positions for measure points based on current chart state
   const getPixelCoords = useCallback((point: MeasurePoint): { x: number; y: number } | null => {

@@ -73,11 +73,27 @@ export interface ToastItem {
   timestamp: number;
 }
 
+export type IndicatorType = 'SMA' | 'EMA' | 'RSI' | 'MACD' | 'BOLLINGER' | 'STOCHASTIC' | 'ATR' | 'VWAP' | 'WILLIAMS_R' | 'OBV';
+
+export type IndicatorPanel = 'overlay' | 'subchart';
+
 export interface IndicatorConfig {
-  type: 'SMA' | 'EMA' | 'RSI' | 'MACD' | 'BOLLINGER';
+  id: string;
+  type: IndicatorType;
   period: number;
   enabled: boolean;
   color: string;
+  params?: Record<string, number>; // extra params (e.g., MACD fast/slow/signal, Bollinger stdDev)
+}
+
+export interface IndicatorCatalogEntry {
+  type: IndicatorType;
+  label: string;
+  defaultPeriod: number;
+  defaultColor: string;
+  panel: IndicatorPanel;
+  description: string;
+  defaultParams?: Record<string, number>;
 }
 
 export interface MarketIndex {
