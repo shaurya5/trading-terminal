@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { yahooFinance } from '@/lib/yahoo';
-import { getCached, setCache } from '@/lib/cache';
+import { getCachedAsync, setCache } from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,8 +13,8 @@ export async function GET(req: NextRequest) {
   }
 
   const cacheKey = `candles:${symbol}:${range}`;
-  const cached = getCached<unknown[]>(cacheKey);
-  if (cached) return NextResponse.json(cached);
+  const cached = await getCachedAsync<unknown[]>(cacheKey);
+  if (cached) return NextResponse.json(cached, { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120' } });
 
   try {
     const periodMap: Record<string, { period1: string; interval: '1d' | '1wk' | '1h' | '5m' }> = {
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
     const deduped = Array.from(seen.values());
 
     setCache(cacheKey, deduped, 60000);
-    return NextResponse.json(deduped);
+    return NextResponse.json(deduped, { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120' } });
   } catch (e) {
     console.error('Candles API error:', e);
     return NextResponse.json({ error: 'Failed to fetch candles' }, { status: 500 });

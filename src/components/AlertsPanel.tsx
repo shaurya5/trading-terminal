@@ -105,7 +105,9 @@ export default function AlertsPanel({ alerts, stocks, onAdd, onRemove, onToggle 
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => onToggle(alert.id)}
-                  className={`w-2 h-2 rounded-full ${alert.active ? 'bg-green-400' : 'bg-gray-600'}`}
+                  aria-label={`Toggle alert ${alert.active ? 'off' : 'on'}`}
+                  aria-pressed={alert.active}
+                  className={`w-4 h-4 rounded-full flex-shrink-0 ${alert.active ? 'bg-green-400' : 'bg-gray-600'}`}
                 />
                 <div>
                   <span className="text-[11px] text-white font-mono">{alert.symbol}</span>

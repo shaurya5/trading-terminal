@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { yahooFinance } from '@/lib/yahoo';
-import { getCached, setCache } from '@/lib/cache';
+import { getCachedAsync, setCache } from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,8 +43,8 @@ export async function GET(req: NextRequest) {
   }
 
   const cacheKey = `news:${symbol}`;
-  const cached = getCached<unknown[]>(cacheKey);
-  if (cached) return NextResponse.json(cached);
+  const cached = await getCachedAsync<unknown[]>(cacheKey);
+  if (cached) return NextResponse.json(cached, { headers: { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=240' } });
 
   const baseSymbol = symbol.replace('.NS', '').replace('.BO', '').toUpperCase();
 
@@ -141,7 +141,7 @@ export async function GET(req: NextRequest) {
     const combined = [...stockNews, ...marketNews.slice(0, 5)];
 
     setCache(cacheKey, combined, 120000);
-    return NextResponse.json(combined);
+    return NextResponse.json(combined, { headers: { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=240' } });
   } catch (e) {
     console.error('News API error:', e);
     return NextResponse.json({ error: 'Failed to fetch news' }, { status: 500 });

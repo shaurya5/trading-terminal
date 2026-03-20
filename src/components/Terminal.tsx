@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { IndicatorConfig, PriceAlert, ChartWindow, NamedWatchlist, ToastItem, SectorPerformance } from '@/types';
 import { useQuotes, useIndices, useCandles, useNews } from '@/hooks/useStockData';
 import { useCompareData } from '@/hooks/useCompareData';
+import { safeParseJSON, safeGetString } from '@/lib/storage';
 import Header from './Header';
 import Watchlist from './Watchlist';
 import Chart from './Chart';
@@ -42,51 +43,71 @@ function displaySymbol(s: string) {
 }
 
 export default function Terminal() {
-  const [selectedSymbol, setSelectedSymbol] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('trading-selected-symbol') ?? 'RELIANCE.NS';
+  const [disclaimerDismissed, setDisclaimerDismissed] = useState(() => {
+    return safeGetString('trading-disclaimer-dismissed', '') === 'true';
+  });
+
+  const dismissDisclaimer = useCallback(() => {
+    setDisclaimerDismissed(true);
+    try {
+      localStorage.setItem('trading-disclaimer-dismissed', 'true');
+    } catch {
+      // localStorage unavailable
     }
-    return 'RELIANCE.NS';
+  }, []);
+
+  const [selectedSymbol, setSelectedSymbol] = useState(() => {
+    return safeGetString('trading-selected-symbol', 'RELIANCE.NS');
   });
   const [activeView, setActiveView] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('trading-active-view') ?? 'terminal';
-    }
-    return 'terminal';
+    return safeGetString('trading-active-view', 'terminal');
   });
   const [searchOpen, setSearchOpen] = useState(false);
   const [indicators, setIndicators] = useState<IndicatorConfig[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('trading-indicators');
-      if (saved) {
-        try {
-          const parsed: IndicatorConfig[] = JSON.parse(saved);
-          return DEFAULT_INDICATORS.map(d => {
-            const match = parsed.find(p => p.type === d.type);
-            return match ? { ...d, enabled: match.enabled } : d;
-          });
-        } catch {
-          return DEFAULT_INDICATORS;
-        }
-      }
+    const parsed = safeParseJSON<IndicatorConfig[] | null>('trading-indicators', null);
+    if (parsed) {
+      return DEFAULT_INDICATORS.map(d => {
+        const match = parsed.find(p => p.type === d.type);
+        return match ? { ...d, enabled: match.enabled } : d;
+      });
     }
     return DEFAULT_INDICATORS;
   });
   const [alerts, setAlerts] = useState<PriceAlert[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('trading-alerts');
-      return saved ? JSON.parse(saved) : [];
-    }
-    return [];
+    return safeParseJSON<PriceAlert[]>('trading-alerts', []);
   });
   const [rightPanel, setRightPanel] = useState<'details' | 'news' | 'watchlist'>('details');
   const [chartRange, setChartRange] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('trading-chart-range') ?? '1y';
-    }
-    return '1y';
+    return safeGetString('trading-chart-range', '1y');
   });
   const [measureMode, setMeasureMode] = useState(false);
+
+  // Responsive sidebar state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [mobileWarningDismissed, setMobileWarningDismissed] = useState(false);
+
+  // Auto-collapse sidebar on small screens
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mql = window.matchMedia('(max-width: 1024px)');
+    const handler = (e: MediaQueryListEvent | MediaQueryList) => {
+      setSidebarCollapsed(e.matches);
+      if (e.matches) setRightPanelOpen(false);
+      else setRightPanelOpen(true);
+    };
+    handler(mql);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, []);
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed(prev => !prev);
+  }, []);
+
+  const toggleRightPanel = useCallback(() => {
+    setRightPanelOpen(prev => !prev);
+  }, []);
 
   // Multi-window
   const [chartWindows, setChartWindows] = useState<ChartWindow[]>([
@@ -98,26 +119,18 @@ export default function Terminal() {
 
   // Multiple named watchlists
   const [watchlists, setWatchlists] = useState<NamedWatchlist[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('trading-watchlists');
-      if (saved) return JSON.parse(saved);
-      // Migrate from old single watchlist
-      const legacy = localStorage.getItem('trading-watchlist');
-      if (legacy) {
-        const symbols: string[] = JSON.parse(legacy);
-        if (symbols.length > 0) {
-          return [{ id: crypto.randomUUID(), name: 'My Watchlist', symbols }];
-        }
-      }
-      return [{ id: crypto.randomUUID(), name: 'My Watchlist', symbols: [] }];
+    const defaultWatchlist = [{ id: crypto.randomUUID(), name: 'My Watchlist', symbols: [] as string[] }];
+    const saved = safeParseJSON<NamedWatchlist[] | null>('trading-watchlists', null);
+    if (saved) return saved;
+    // Migrate from old single watchlist
+    const legacy = safeParseJSON<string[] | null>('trading-watchlist', null);
+    if (legacy && legacy.length > 0) {
+      return [{ id: crypto.randomUUID(), name: 'My Watchlist', symbols: legacy }];
     }
-    return [{ id: crypto.randomUUID(), name: 'My Watchlist', symbols: [] }];
+    return defaultWatchlist;
   });
   const [activeWatchlistId, setActiveWatchlistId] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('trading-active-watchlist') ?? '';
-    }
-    return '';
+    return safeGetString('trading-active-watchlist', '');
   });
 
   const { quotes: stocks, loading: stocksLoading, error: stocksError } = useQuotes();
@@ -421,17 +434,26 @@ export default function Terminal() {
       <ComparePanel compareSymbols={compareSymbols} onAdd={addCompare} onRemove={removeCompare} />
       <div className="flex items-center gap-0.5 px-3 py-1 border-b border-gray-800 bg-[#0d1117]">
         <span className="text-[10px] text-gray-500 uppercase tracking-wider mr-2">Range</span>
-        {['1d', '5d', '1mo', '6mo', '1y', '5y'].map(r => (
+        {[
+          { value: '1d', label: '1 day range' },
+          { value: '5d', label: '5 day range' },
+          { value: '1mo', label: '1 month range' },
+          { value: '6mo', label: '6 month range' },
+          { value: '1y', label: '1 year range' },
+          { value: '5y', label: '5 year range' },
+        ].map(r => (
           <button
-            key={r}
-            onClick={() => setChartRange(r)}
+            key={r.value}
+            onClick={() => setChartRange(r.value)}
+            aria-label={r.label}
+            aria-pressed={chartRange === r.value}
             className={`px-2 py-0.5 text-[11px] rounded font-mono transition-colors ${
-              chartRange === r
+              chartRange === r.value
                 ? 'text-white border border-gray-600 bg-gray-800'
                 : 'text-gray-500 border border-gray-800 hover:border-gray-700 hover:text-gray-400'
             }`}
           >
-            {r.toUpperCase()}
+            {r.value.toUpperCase()}
           </button>
         ))}
       </div>
@@ -448,8 +470,8 @@ export default function Terminal() {
     </div>
   );
 
-  const rightPanelSection = (
-    <div className="w-72 border-l border-gray-800 flex-shrink-0 flex flex-col">
+  const rightPanelContent = (
+    <>
       <div className="flex border-b border-gray-800">
         {(['details', 'news', 'watchlist'] as const).map(p => (
           <button
@@ -482,16 +504,74 @@ export default function Terminal() {
           />
         )}
       </div>
-    </div>
+    </>
+  );
+
+  const rightPanelSection = (
+    <>
+      {/* Desktop: inline panel */}
+      <div className="hidden lg:flex w-72 border-l border-gray-800 flex-shrink-0 flex-col">
+        {rightPanelContent}
+      </div>
+      {/* Tablet/small: overlay panel */}
+      {rightPanelOpen && (
+        <div className="lg:hidden absolute right-0 top-0 bottom-0 w-72 bg-[#0a0e17] border-l border-gray-800 flex flex-col z-30">
+          <button
+            onClick={toggleRightPanel}
+            aria-label="Close details panel"
+            className="absolute top-1 right-1 z-40 p-1 text-gray-500 hover:text-white transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          {rightPanelContent}
+        </div>
+      )}
+    </>
   );
 
   return (
     <ErrorBoundary fallbackTitle="Trading Terminal encountered an error">
-    <div className="flex flex-col h-screen bg-[#0a0e17] text-white overflow-hidden">
+    <div id="main-content" className="flex flex-col h-screen bg-[#0a0e17] text-white overflow-hidden">
+      {/* Mobile warning for < 768px */}
+      {!mobileWarningDismissed && (
+        <div className="md:hidden fixed inset-0 z-50 bg-[#0a0e17] flex items-center justify-center p-6">
+          <div className="text-center max-w-sm">
+            <div className="w-3 h-3 rounded-full bg-orange-500 mx-auto mb-4" />
+            <h2 className="text-lg text-white font-bold mb-2">Desktop Optimized</h2>
+            <p className="text-sm text-gray-400 mb-6">
+              This terminal is optimized for desktop. For the best experience, use a screen 768px or wider.
+            </p>
+            <button
+              onClick={() => setMobileWarningDismissed(true)}
+              className="px-4 py-2 text-sm bg-orange-600 hover:bg-orange-500 text-white rounded transition-colors"
+            >
+              Continue Anyway
+            </button>
+          </div>
+        </div>
+      )}
+      {!disclaimerDismissed && (
+        <div className="h-5 bg-[#0a0e17] border-b border-gray-800/50 flex items-center justify-center relative flex-shrink-0">
+          <span className="text-[8px] text-gray-600 text-center">
+            Data provided by Yahoo Finance. Prices may be delayed. For informational purposes only — not financial advice.
+          </span>
+          <button
+            onClick={dismissDisclaimer}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 hover:text-gray-400 text-[10px] leading-none"
+            aria-label="Dismiss disclaimer"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <Header
         onSearchOpen={() => setSearchOpen(true)}
         activeView={activeView}
         onViewChange={setActiveView}
+        onToggleSidebar={toggleSidebar}
+        sidebarCollapsed={sidebarCollapsed}
       />
 
       <StockSearch
@@ -502,42 +582,87 @@ export default function Terminal() {
       />
 
       {activeView === 'terminal' && (
-        <div className="flex flex-1 overflow-hidden">
-          <div className="w-64 border-r border-gray-800 flex-shrink-0">
+        <div className="flex flex-1 overflow-hidden relative">
+          <div className={`border-r border-gray-800 flex-shrink-0 transition-all duration-200 ${sidebarCollapsed ? 'w-0 overflow-hidden' : 'w-64'}`}>
             <Watchlist stocks={stocks} selectedSymbol={selectedSymbol} onSelect={handleSelectSymbol} onAddToWatchlist={addToWatchlist} watchlists={watchlists} />
           </div>
           {chartSection}
           {rightPanelSection}
+          {/* Toggle buttons for collapsed panels on small screens */}
+          {sidebarCollapsed && (
+            <button
+              onClick={toggleSidebar}
+              aria-label="Show watchlist sidebar"
+              className="lg:hidden absolute left-2 top-2 z-20 p-1.5 bg-gray-800 border border-gray-700 rounded text-gray-400 hover:text-white transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          )}
+          {!rightPanelOpen && (
+            <button
+              onClick={toggleRightPanel}
+              aria-label="Show details panel"
+              className="lg:hidden absolute right-2 top-2 z-20 p-1.5 bg-gray-800 border border-gray-700 rounded text-gray-400 hover:text-white transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+          )}
         </div>
       )}
 
       {activeView === 'markets' && (
-        <div className="flex flex-1 overflow-hidden">
-          <div className="w-80 border-r border-gray-800">
+        <div className="flex flex-1 overflow-hidden relative">
+          <div className={`border-r border-gray-800 transition-all duration-200 ${sidebarCollapsed ? 'w-0 overflow-hidden' : 'w-80'}`}>
             <MarketOverview indices={indices} sectors={sectors} />
           </div>
           {chartSection}
-          <div className="w-64 border-l border-gray-800">
+          <div className="hidden lg:block w-64 border-l border-gray-800">
             <Watchlist stocks={[...stocks].sort((a, b) => b.changePercent - a.changePercent)} selectedSymbol={selectedSymbol} onSelect={handleSelectSymbol} onAddToWatchlist={addToWatchlist} watchlists={watchlists} />
           </div>
+          {sidebarCollapsed && (
+            <button
+              onClick={toggleSidebar}
+              aria-label="Show market overview sidebar"
+              className="lg:hidden absolute left-2 top-2 z-20 p-1.5 bg-gray-800 border border-gray-700 rounded text-gray-400 hover:text-white transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          )}
         </div>
       )}
 
       {activeView === 'alerts' && (
-        <div className="flex flex-1 overflow-hidden">
-          <div className="w-80 border-r border-gray-800">
+        <div className="flex flex-1 overflow-hidden relative">
+          <div className={`border-r border-gray-800 transition-all duration-200 ${sidebarCollapsed ? 'w-0 overflow-hidden' : 'w-80'}`}>
             <AlertsPanel alerts={alerts} stocks={stocks} onAdd={addAlert} onRemove={removeAlert} onToggle={toggleAlert} />
           </div>
           {chartSection}
-          <div className="w-72 border-l border-gray-800">
+          <div className="hidden lg:block w-72 border-l border-gray-800">
             {selectedStock && <StockDetails stock={selectedStock} />}
           </div>
+          {sidebarCollapsed && (
+            <button
+              onClick={toggleSidebar}
+              aria-label="Show alerts sidebar"
+              className="lg:hidden absolute left-2 top-2 z-20 p-1.5 bg-gray-800 border border-gray-700 rounded text-gray-400 hover:text-white transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          )}
         </div>
       )}
 
       {activeView === 'multi' && (
-        <div className="flex flex-1 overflow-hidden">
-          <div className="w-64 border-r border-gray-800 flex-shrink-0 flex flex-col">
+        <div className="flex flex-1 overflow-hidden relative">
+          <div className={`border-r border-gray-800 flex-shrink-0 flex flex-col transition-all duration-200 ${sidebarCollapsed ? 'w-0 overflow-hidden' : 'w-64'}`}>
             <Watchlist stocks={stocks} selectedSymbol={selectedSymbol} onSelect={handleSelectSymbol} onAddToWatchlist={addToWatchlist} watchlists={watchlists} />
             <div className="border-t border-gray-800 px-3 py-2">
               <button
@@ -563,6 +688,17 @@ export default function Terminal() {
             onToggleMeasure={toggleMeasure}
           />
           {rightPanelSection}
+          {sidebarCollapsed && (
+            <button
+              onClick={toggleSidebar}
+              aria-label="Show watchlist sidebar"
+              className="lg:hidden absolute left-2 top-2 z-20 p-1.5 bg-gray-800 border border-gray-700 rounded text-gray-400 hover:text-white transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          )}
         </div>
       )}
 

@@ -25,6 +25,10 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[ErrorBoundary]', error, errorInfo);
+    // Report to Sentry if configured
+    import('@/lib/sentry').then(({ captureException }) => {
+      captureException(error, { componentStack: errorInfo.componentStack ?? undefined });
+    }).catch(() => {});
   }
 
   handleReload = () => {

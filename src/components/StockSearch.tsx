@@ -59,9 +59,9 @@ function StockSearchDialog({ stocks, onSelect, onClose }: StockSearchProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/60" role="dialog" aria-modal="true" aria-label="Search stocks" onClick={onClose}>
       <div
-        className="w-[500px] bg-[#0d1117] border border-gray-700 rounded-lg shadow-2xl overflow-hidden"
+        className="w-[500px] max-w-[95vw] bg-[#0d1117] border border-gray-700 rounded-lg shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center px-4 py-3 border-b border-gray-800">

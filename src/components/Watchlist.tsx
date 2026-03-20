@@ -88,6 +88,7 @@ export default function Watchlist({ stocks, selectedSymbol, onSelect, onAddToWat
             </div>
             <div className="w-16 text-right">
               <span className={`text-[11px] font-mono ${stock.changePercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                <span className="sr-only">{stock.changePercent >= 0 ? 'up' : 'down'}</span>
                 {stock.changePercent >= 0 ? '+' : ''}{stock.changePercent.toFixed(2)}%
               </span>
             </div>

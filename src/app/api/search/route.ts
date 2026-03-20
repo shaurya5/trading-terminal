@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { yahooFinance } from '@/lib/yahoo';
-import { getCached, setCache } from '@/lib/cache';
+import { getCachedAsync, setCache } from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,8 +18,8 @@ export async function GET(req: NextRequest) {
   }
 
   const cacheKey = `search:${query}`;
-  const cached = getCached<unknown[]>(cacheKey);
-  if (cached) return NextResponse.json(cached);
+  const cached = await getCachedAsync<unknown[]>(cacheKey);
+  if (cached) return NextResponse.json(cached, { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' } });
 
   try {
     const result = await yahooFinance.search(query);
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       }));
 
     setCache(cacheKey, stocks, 300000);
-    return NextResponse.json(stocks);
+    return NextResponse.json(stocks, { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' } });
   } catch (e) {
     console.error('Search API error:', e);
     return NextResponse.json({ error: 'Failed to search' }, { status: 500 });

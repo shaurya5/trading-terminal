@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { yahooFinance, DEFAULT_SYMBOLS, INDEX_SYMBOLS } from '@/lib/yahoo';
-import { getCached, setCache } from '@/lib/cache';
+import { getCachedAsync, setCache } from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,8 +9,8 @@ export async function GET(req: NextRequest) {
   const type = req.nextUrl.searchParams.get('type');
 
   const cacheKey = `quotes:${type ?? 'stocks'}:${symbolsParam ?? 'default'}`;
-  const cached = getCached<unknown[]>(cacheKey);
-  if (cached) return NextResponse.json(cached);
+  const cached = await getCachedAsync<unknown[]>(cacheKey);
+  if (cached) return NextResponse.json(cached, { headers: { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=10' } });
 
   try {
     const symbols = type === 'indices'
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
       .filter(Boolean);
 
     setCache(cacheKey, quotes, 5000);
-    return NextResponse.json(quotes);
+    return NextResponse.json(quotes, { headers: { 'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=10' } });
   } catch (e) {
     console.error('Quotes API error:', e);
     return NextResponse.json({ error: 'Failed to fetch quotes' }, { status: 500 });

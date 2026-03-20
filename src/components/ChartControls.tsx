@@ -25,6 +25,8 @@ export default function ChartControls({ indicators, onToggle, measureMode, onTog
         <button
           key={ind.type}
           onClick={() => onToggle(ind.type)}
+          aria-pressed={ind.enabled}
+          aria-label={`Toggle ${ind.type} indicator`}
           className={`px-2 py-0.5 text-[11px] rounded font-mono transition-colors ${
             ind.enabled
               ? 'text-white border border-gray-600 bg-gray-800'
@@ -41,6 +43,8 @@ export default function ChartControls({ indicators, onToggle, measureMode, onTog
           <span className="text-[10px] text-gray-500 uppercase tracking-wider mr-1">Tools</span>
           <button
             onClick={onToggleMeasure}
+            aria-pressed={measureMode}
+            aria-label="Toggle measure tool"
             className={`px-2 py-0.5 text-[11px] rounded font-mono transition-colors flex items-center gap-1 ${
               measureMode
                 ? 'text-yellow-400 border border-yellow-600 bg-yellow-900/30'
