@@ -130,9 +130,12 @@ export default function Chart({ data, symbol, indicators, compareData, measureMo
   const buildChart = useCallback(() => {
     if (!chartContainerRef.current || data.length === 0) return;
 
+    const container = chartContainerRef.current;
+    // Wait for the container to have actual dimensions (flex layout may not have resolved yet)
+    if (container.clientWidth === 0 || container.clientHeight === 0) return;
+
     destroyCharts();
 
-    const container = chartContainerRef.current;
     const subChartCount = (hasRSI ? 1 : 0) + (hasMACD ? 1 : 0);
     const mainHeight = subChartCount === 0 ? container.clientHeight : container.clientHeight * 0.6;
     const subHeight = subChartCount > 0 ? (container.clientHeight * 0.4) / subChartCount : 0;
@@ -443,13 +446,33 @@ export default function Chart({ data, symbol, indicators, compareData, measureMo
     }
   }, [data, indicators, hasRSI, hasMACD, compareData, indicatorStructureKey, compareCount, buildChart, updateSeriesData]);
 
-  // Effect: Window resize handler
+  // Effect: Window resize handler + ResizeObserver for initial layout
   useEffect(() => {
     window.addEventListener('resize', handleResize);
+
+    // ResizeObserver catches the case where the container goes from 0 to nonzero size
+    // (e.g., flex layout resolving after mount, or view switching)
+    const container = chartContainerRef.current;
+    let observer: ResizeObserver | null = null;
+    if (container) {
+      observer = new ResizeObserver(() => {
+        if (container.clientWidth > 0 && container.clientHeight > 0) {
+          // If chart hasn't been built yet (prevStructureRef is null), build it now
+          if (!chartRef.current && data.length > 0) {
+            buildChart();
+          } else {
+            handleResize();
+          }
+        }
+      });
+      observer.observe(container);
+    }
+
     return () => {
       window.removeEventListener('resize', handleResize);
+      observer?.disconnect();
     };
-  }, [handleResize]);
+  }, [handleResize, buildChart, data.length]);
 
   // Effect: Cleanup on unmount
   useEffect(() => {
